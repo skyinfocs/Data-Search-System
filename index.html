@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skyinfo Tech Data Search System</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Google Sheets specific styling */
+        .google-sheets-btn {
+            background: linear-gradient(to right, #0F9D58, #0B7E44) !important;
+        }
+
+        .google-sheets-btn:hover {
+            background: linear-gradient(to right, #0B7E44, #0A6337) !important;
+        }
+        
+        /* Loading Animation */
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Connection Status in Header */
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 15px;
+            padding: 5px 12px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-dot.connected {
+            background: #4caf50;
+            box-shadow: 0 0 8px #4caf50;
+        }
+
+        .status-dot.connecting {
+            background: #ff9800;
+            animation: pulse 1s infinite;
+        }
+
+        .status-dot.error {
+            background: #f44336;
+        }
+
+        .status-text {
+            color: white;
+        }
+
+        .record-badge {
+            background: rgba(255, 255, 255, 0.25);
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            margin-left: 5px;
+        }
+
+        /* Hide the file info section */
+        .file-info-header {
+            display: none !important;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-top">
+                <div class="logo-area">
+                    <div class="logo-icon">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <div class="title-area">
+                        <h1>Skyinfo Tech Data Search System</h1>
+                        <p>Find multiple User IDs associated with a single number quickly and efficiently.</p>
+                    </div>
+                </div>
+                
+                <div class="header-actions">
+                    <div class="header-search">
+                        <div class="search-box-header">
+                            <input type="text" id="headerSearchInput" placeholder="Search by number or User ID...">
+                            <button id="headerSearchBtn" class="search-btn-header">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="header-upload">
+                        <button id="loadGoogleSheetsDataBtn" class="upload-btn-header google-sheets-btn">
+                            <i class="fab fa-google"></i>
+                            <span>Refresh Data</span>
+                        </button>
+                    </div>
+
+                    <!-- Connection Status in Header -->
+                    <div class="connection-status" id="headerConnectionStatus">
+                        <span class="status-dot" id="statusDot"></span>
+                        <span class="status-text" id="statusText">Connecting...</span>
+                        <span class="record-badge" id="headerRecordBadge">0</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- This section is now hidden by CSS -->
+            <div class="file-info-header" id="headerFileInfo">
+                <div class="file-info-content">
+                    <i class="fab fa-google"></i>
+                    <span id="headerFileName">Loading data from Google Sheets...</span>
+                    <span id="headerRecordCount" class="record-count-header">0 records</span>
+                    <button id="headerClearFileBtn" class="clear-file-btn-header">
+                        <i class="fas fa-redo"></i> Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="dashboard">
+            <div class="stats-container">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background-color: #4caf50;">
+                        <i class="fas fa-list-alt"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 class="stat-value" id="totalRecords">0</h3>
+                        <p class="stat-label">TOTAL RECORDS</p>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon" style="background-color: #2196f3;">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 class="stat-value" id="activeUsers">0</h3>
+                        <p class="stat-label">ACTIVE USERS</p>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon" style="background-color: #ff9800;">
+                        <i class="fas fa-code-branch"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 class="stat-value" id="totalBranches">0</h3>
+                        <p class="stat-label">BRANCHES</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="quick-search-section">
+            <div class="section-header">
+                <h3><i class="fas fa-bolt"></i> Quick Search Examples</h3>
+                <p>Click any number or User ID to search instantly</p>
+            </div>
+            
+            <div class="quick-search-tags">
+                <div class="tag-category">
+                    <h4>Phone Numbers</h4>
+                    <div class="tags-container">
+                        <span class="search-tag" data-search="91600000000">91600000000</span>
+                        <span class="search-tag" data-search="91777777777">91777777777</span>
+                        <span class="search-tag" data-search="91888888888">91888888888</span>
+                        <span class="search-tag" data-search="91999999999">91999999999</span>
+                        <span class="search-tag" data-search="91555555555">91555555555</span>
+                    </div>
+                </div>
+                
+                <div class="tag-category">
+                    <h4>User IDs</h4>
+                    <div class="tags-container">
+                        <span class="search-tag" data-search="bbc1234">bbc1234</span>
+                        <span class="search-tag" data-search="bbc5678">bbc5678</span>
+                        <span class="search-tag" data-search="bbc9012">bbc9012</span>
+                        <span class="search-tag" data-search="bbc3456">bbc3456</span>
+                        <span class="search-tag" data-search="bbc7890">bbc7890</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="instructions-section">
+            <div class="section-header">
+                <h3><i class="fas fa-info-circle"></i> How to Use This System</h3>
+            </div>
+            
+            <div class="instructions-grid">
+                <div class="instruction-card">
+                    <div class="instruction-icon">
+                        <i class="fab fa-google"></i>
+                    </div>
+                    <div class="instruction-content">
+                        <h4>1. Data is Loaded from Google Sheets</h4>
+                        <p>The system automatically loads data from Google Sheets. No manual upload needed!</p>
+                        <p class="note">Click "Refresh Data" to reload the latest data.</p>
+                    </div>
+                </div>
+                
+                <div class="instruction-card">
+                    <div class="instruction-icon">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <div class="instruction-content">
+                        <h4>2. Search Your Data</h4>
+                        <p>Use the search box in the header to search by phone number or User ID.</p>
+                        <p class="note">You can also click any quick search tag above.</p>
+                    </div>
+                </div>
+                
+                <div class="instruction-card">
+                    <div class="instruction-icon">
+                        <i class="fas fa-download"></i>
+                    </div>
+                    <div class="instruction-content">
+                        <h4>3. Export Results</h4>
+                        <p>Export your search results as CSV for further analysis. Results show all User IDs associated with the searched number.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Section - Initially Hidden -->
+        <section class="results-section hidden">
+            <div class="results-header">
+                <h3><i class="fas fa-poll"></i> Search Results</h3>
+                <div class="results-count">
+                    <span class="count-badge">0</span>
+                    <span>RESULTS FOUND</span>
+                </div>
+            </div>
+            
+            <div class="results-content">
+                <!-- Results Table (shown when data found) -->
+                <div class="results-table-container hidden">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>UserID</th>
+                                <th>Number</th>
+                                <th>Branch</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody">
+                            <!-- Results will be populated here by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- No Results Message (shown when no data found) -->
+                <div class="no-results" id="noResultsMessage">
+                    <i class="fas fa-search"></i>
+                    <p id="noResultsText">No matching records found</p>
+                </div>
+                
+                <!-- Results Actions (shown when data found) -->
+                <div class="results-actions hidden">
+                    <button class="action-btn export-btn">
+                        <i class="fas fa-file-export"></i> Export Results
+                    </button>
+                    <button class="action-btn clear-btn">
+                        <i class="fas fa-eraser"></i> Clear Results
+                    </button>
+                    <button class="action-btn refresh-btn" id="refreshSearchBtn">
+                        <i class="fas fa-redo"></i> Refresh Search
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-logo">
+                    <i class="fas fa-database"></i>
+                    <span>Skyinfo Tech Data Search System</span>
+                </div>
+                <div class="footer-info">
+                    <p>© 2026 Skyinfo Tech. All rights reserved. | Developed by BBC.</p>
+                    <p class="footer-links">
+                        <a href="#" id="" target="_blank"><i class="fab fa-google"></i>Google Sheets</a>
+                        <a href="#"><i class="fas fa-file-contract"></i> Terms of Service</a>
+                        <a href="#"><i class="fas fa-envelope"></i> Contact Support</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Include SheetJS library for Excel file reading (keeping for compatibility) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
