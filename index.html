@@ -127,16 +127,18 @@
                         <span class="search-tag" data-search="91777777777">91777777777</span>
                         <span class="search-tag" data-search="91888888888">91888888888</span>
                         <span class="search-tag" data-search="91999999999">91999999999</span>
+                        <span class="search-tag" data-search="91555555555">91555555555</span>
                     </div>
                 </div>
                 
                 <div class="tag-category">
                     <h4>User IDs</h4>
                     <div class="tags-container">
-                        <span class="search-tag" data-search="bbc1234">demo1234</span>
-                        <span class="search-tag" data-search="bbc5678">demo5678</span>
-                        <span class="search-tag" data-search="bbc9012">demo9012</span>
-                        <span class="search-tag" data-search="bbc3456">demo3456</span>
+                        <span class="search-tag" data-search="bbc1234">bbc1234</span>
+                        <span class="search-tag" data-search="bbc5678">bbc5678</span>
+                        <span class="search-tag" data-search="bbc9012">bbc9012</span>
+                        <span class="search-tag" data-search="bbc3456">bbc3456</span>
+                        <span class="search-tag" data-search="bbc7890">bbc7890</span>
                     </div>
                 </div>
             </div>
@@ -154,7 +156,7 @@
                     </div>
                     <div class="instruction-content">
                         <h4>1. Search</h4>
-                        <p>Type a phone number or User ID in the search box and click Search or press Enter.</p>
+                        <p>Type a phone number or User ID and click Search. Only exact matches will be shown.</p>
                     </div>
                 </div>
                 
@@ -171,11 +173,11 @@
                 
                 <div class="instruction-card">
                     <div class="instruction-icon">
-                        <i class="fas fa-download"></i>
+                        <i class="fas fa-eye"></i>
                     </div>
                     <div class="instruction-content">
-                        <h4>3. Export</h4>
-                        <p>Export your search results as CSV for further analysis.</p>
+                        <h4>3. View Only</h4>
+                        <p>This is a view-only system. Export feature is currently disabled.</p>
                     </div>
                 </div>
             </div>
@@ -187,7 +189,7 @@
                 <h3><i class="fas fa-poll"></i> Search Results</h3>
                 <div class="results-count">
                     <span class="count-badge">0</span>
-                    <span>RESULTS FOUND</span>
+                    <span>EXACT MATCHES FOUND</span>
                 </div>
             </div>
             
@@ -208,13 +210,14 @@
                 
                 <div class="no-results" id="noResultsMessage">
                     <i class="fas fa-search"></i>
-                    <p id="noResultsText">No matching records found</p>
+                    <p id="noResultsText">No exact matching records found</p>
                 </div>
                 
                 <div class="results-actions hidden">
-                    <button class="action-btn export-btn">
+                    <!-- Export Button Disabled - Commented Out -->
+                    <!-- <button class="action-btn export-btn">
                         <i class="fas fa-file-export"></i> Export Results
-                    </button>
+                    </button> -->
                     <button class="action-btn clear-btn">
                         <i class="fas fa-eraser"></i> Clear Results
                     </button>
@@ -231,11 +234,9 @@
                     <span>Skyinfo Tech Data Search System</span>
                 </div>
                 <div class="footer-info">
-                    <p>© 2026 Skyinfo Tech. All rights reserved. | Developed by Skyinfotech</p>
+                    <p>© 2026 Skyinfo Tech. All rights reserved.</p>
                     <p class="footer-links">
-                         <a href="#" id="" target="_blank"><i class="fab fa-google"></i>View in Google Sheets</a>
-                        <a href="#"><i class="fas fa-file-contract"></i> Terms</a>
-                        <a href="#"><i class="fas fa-envelope"></i> Support</a>
+                        <a href="#" id="googleSheetsViewLink" target="_blank"><i class="fab fa-google"></i> View in Google Sheets</a>
                     </p>
                 </div>
             </div>
@@ -245,4 +246,3 @@
     <script src="script.js"></script>
 </body>
 </html>
-
