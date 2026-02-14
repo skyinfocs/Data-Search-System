@@ -1,19 +1,14 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Elements - Header
+    // Elements
     const headerSearchBtn = document.getElementById('headerSearchBtn');
     const headerSearchInput = document.getElementById('headerSearchInput');
     const headerFileInfo = document.getElementById('headerFileInfo');
     const headerFileName = document.getElementById('headerFileName');
     const headerRecordCount = document.getElementById('headerRecordCount');
-    const headerClearFileBtn = document.getElementById('headerClearFileBtn');
     const loadGoogleSheetsDataBtn = document.getElementById('loadGoogleSheetsDataBtn');
-    
-    // Header Status Elements
     const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
     const headerRecordBadge = document.getElementById('headerRecordBadge');
-    
-    // Elements - Results Section
     const resultsSection = document.querySelector('.results-section');
     const resultsTableBody = document.getElementById('resultsTableBody');
     const resultsTableContainer = document.querySelector('.results-table-container');
@@ -28,8 +23,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const totalRecords = document.getElementById('totalRecords');
     const activeUsers = document.getElementById('activeUsers');
     const totalBranches = document.getElementById('totalBranches');
-    
-    // Footer Links
     const googleSheetsViewLink = document.getElementById('googleSheetsViewLink');
     
     // Search tags
@@ -40,92 +33,58 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentResults = [];
     let branches = new Set();
     let lastSearchTerm = '';
-    let connectionAttempts = 0;
-    const MAX_CONNECTION_ATTEMPTS = 3;
+    let isLoading = false;
     
-    // Google Sheets Configuration - YOUR WORKING LINK
-    const GOOGLE_SHEETS_ID = '2PACX-1vRjA6s9KQC0ULV8_DqLEivh09rmwhJpIN8-ItzIG_rObE-EAY5Ipdut_v6iIedwfDA63XFW8lx6exma';
-    const GOOGLE_SHEETS_CSV_URL = `https://docs.google.com/spreadsheets/d/e/${GOOGLE_SHEETS_ID}/pub?output=csv`;
-    const GOOGLE_SHEETS_VIEW_URL = `https://docs.google.com/spreadsheets/d/e/${GOOGLE_SHEETS_ID}/pubhtml?gid=0&single=true`;
+    // ===== YOUR CORRECT CONFIGURATION =====
+    const SPREADSHEET_ID = '1p-fxYDbWxajcqmeKlTbOV7oLbRTD2z6J3ickMAnS-lg';
+    const GOOGLE_API_KEY = 'AIzaSyDkJbduR9SWGEuIu7pFlng_SYJBQxOf5m0';
+    const VIEW_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit?gid=0`;
     
-    // CORS proxy options (trying multiple for better reliability)
-    const CORS_PROXIES = [
-        'https://api.allorigins.win/raw?url=',
-        'https://cors-anywhere.herokuapp.com/',
-        'https://proxy.cors.sh/'
-    ];
-    let currentProxyIndex = 0;
+    // Batch size - optimal for large datasets
+    const BATCH_SIZE = 10000;
     
-    // Initialize - Load data from Google Sheets automatically
+    // Initialize
     loadDataFromGoogleSheets();
     
-    // Setup search tag click handlers
+    // Event Listeners
     searchTags.forEach(tag => {
         tag.addEventListener('click', function() {
-            const searchTerm = this.getAttribute('data-search');
-            headerSearchInput.value = searchTerm;
-            performSearch(searchTerm);
+            headerSearchInput.value = this.getAttribute('data-search');
+            performSearch(headerSearchInput.value);
         });
     });
     
-    // Load Google Sheets data functionality
-    loadGoogleSheetsDataBtn.addEventListener('click', function() {
-        loadDataFromGoogleSheets();
+    loadGoogleSheetsDataBtn.addEventListener('click', loadDataFromGoogleSheets);
+    
+    headerSearchBtn.addEventListener('click', () => {
+        if (headerSearchInput.value.trim()) performSearch(headerSearchInput.value.trim());
     });
     
-    // Header search functionality
-    headerSearchBtn.addEventListener('click', function() {
-        const searchTerm = headerSearchInput.value.trim();
-        if (searchTerm) {
-            performSearch(searchTerm);
+    headerSearchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && headerSearchInput.value.trim()) {
+            performSearch(headerSearchInput.value.trim());
         }
     });
     
-    headerSearchInput.addEventListener('keypress', function(event) {
-        if (event.key === 'Enter') {
-            const searchTerm = headerSearchInput.value.trim();
-            if (searchTerm) {
-                performSearch(searchTerm);
-            }
-        }
+    exportBtn.addEventListener('click', () => {
+        if (currentResults.length > 0) exportToCSV(currentResults);
     });
     
-    // Refresh data functionality
-    headerClearFileBtn.addEventListener('click', function() {
-        loadDataFromGoogleSheets();
-    });
-    
-    // Export functionality
-    exportBtn.addEventListener('click', function() {
-        if (currentResults.length === 0) {
-            showNotification('No results to export', 'warning');
-            return;
-        }
-        
-        exportToCSV(currentResults);
-    });
-    
-    // Clear results functionality
     clearBtn.addEventListener('click', hideResultsSection);
     
-    // Refresh search functionality
-    refreshSearchBtn.addEventListener('click', function() {
+    refreshSearchBtn.addEventListener('click', () => {
         if (lastSearchTerm) {
             headerSearchInput.value = lastSearchTerm;
             performSearch(lastSearchTerm);
-        } else {
-            showNotification('No previous search to refresh', 'info');
         }
     });
     
-    // Set the Google Sheets view link
     if (googleSheetsViewLink) {
-        googleSheetsViewLink.href = GOOGLE_SHEETS_VIEW_URL;
+        googleSheetsViewLink.href = VIEW_URL;
     }
     
-    // Function to update header status
+    // Update header status
     function updateHeaderStatus(status, message, recordCount = null) {
-        // Remove all status classes
         statusDot.classList.remove('connected', 'connecting', 'error');
         
         switch(status) {
@@ -134,6 +93,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 statusText.textContent = message || 'Connecting...';
                 headerRecordBadge.style.display = 'none';
                 break;
+                
             case 'connected':
                 statusDot.classList.add('connected');
                 statusText.textContent = message || 'Connected';
@@ -142,458 +102,349 @@ document.addEventListener('DOMContentLoaded', function() {
                     headerRecordBadge.style.display = 'inline-block';
                 }
                 break;
+                
             case 'error':
                 statusDot.classList.add('error');
                 statusText.textContent = message || 'Connection Failed';
                 headerRecordBadge.style.display = 'none';
                 break;
-            default:
-                statusText.textContent = message || 'Unknown';
         }
     }
     
-    // Function to try next proxy
-    function getNextProxy() {
-        currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
-        return CORS_PROXIES[currentProxyIndex];
-    }
-    
-    // Function to test connection with timeout
-    async function fetchWithTimeout(url, timeout = 10000) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
-        
-        try {
-            const response = await fetch(url, { 
-                signal: controller.signal,
-                mode: 'cors',
-                headers: {
-                    'Accept': 'text/csv'
-                }
-            });
-            clearTimeout(timeoutId);
-            return response;
-        } catch (error) {
-            clearTimeout(timeoutId);
-            throw error;
-        }
-    }
-    
-    // Function to load data from Google Sheets
+    // Main function to load data in batches
     async function loadDataFromGoogleSheets() {
-        // Reset connection attempts
-        connectionAttempts = 0;
+        if (isLoading) return;
+        isLoading = true;
         
-        // Show loading state
-        headerFileName.textContent = 'Connecting to Google Sheets...';
-        headerRecordCount.textContent = 'Loading...';
-        loadGoogleSheetsDataBtn.innerHTML = '<div class="loading-spinner"></div> Connecting...';
+        headerFileName.textContent = 'Loading data...';
+        headerRecordCount.textContent = 'Please wait...';
+        loadGoogleSheetsDataBtn.innerHTML = '<div class="loading-spinner"></div> Loading...';
         loadGoogleSheetsDataBtn.disabled = true;
         
-        // Update header status
-        updateHeaderStatus('connecting', 'Connecting to Google Sheets...');
+        updateHeaderStatus('connecting', 'Loading records...');
+        showNotification('Starting to load 296,000+ records...', 'info');
         
-        showNotification('Connecting to Google Sheets...', 'info');
-        
-        await attemptConnection();
-    }
-    
-    // Function to attempt connection with retry logic
-    async function attemptConnection() {
         try {
-            // Try multiple proxies if needed
-            let lastError = null;
+            // First, get the total number of rows
+            const metadataUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?key=${GOOGLE_API_KEY}`;
+            const metadataResponse = await fetch(metadataUrl);
             
-            for (let i = 0; i < CORS_PROXIES.length; i++) {
-                const proxy = CORS_PROXIES[currentProxyIndex];
-                const urlToFetch = proxy + encodeURIComponent(GOOGLE_SHEETS_CSV_URL);
-                
-                try {
-                    showNotification(`Attempting connection via proxy ${currentProxyIndex + 1}...`, 'info');
-                    
-                    const response = await fetchWithTimeout(urlToFetch);
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    
-                    const csvText = await response.text();
-                    
-                    // Verify we got actual CSV data
-                    if (csvText.length < 10 || !csvText.includes(',')) {
-                        throw new Error('Invalid CSV data received');
-                    }
-                    
-                    // Parse the CSV data
-                    const parseSuccess = parseCSVData(csvText);
-                    
-                    if (parseSuccess && uploadedData.length > 0) {
-                        // Success! Update UI
-                        updateFileInfo(`Google Sheets Data Loaded`, uploadedData.length);
-                        updateStats();
-                        
-                        // Update header status with record count
-                        updateHeaderStatus('connected', 'Live', uploadedData.length);
-                        
-                        showNotification(`✅ Successfully connected! Loaded ${uploadedData.length} records from Google Sheets`, 'success');
-                        return true;
-                    } else {
-                        throw new Error('No data parsed from CSV');
-                    }
-                    
-                } catch (error) {
-                    console.error(`Proxy ${currentProxyIndex + 1} failed:`, error);
-                    lastError = error;
-                    
-                    // Try next proxy
-                    currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
-                    
-                    // If we've tried all proxies, break and show error
-                    if (i === CORS_PROXIES.length - 1) {
-                        throw lastError;
-                    }
-                    
-                    // Small delay before next attempt
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
+            if (!metadataResponse.ok) {
+                throw new Error('Failed to get sheet metadata');
             }
             
-        } catch (error) {
-            console.error('All connection attempts failed:', error);
+            const metadata = await metadataResponse.json();
+            const sheetName = metadata.sheets[0].properties.title;
+            const totalRows = metadata.sheets[0].properties.gridProperties.rowCount;
             
-            // Update header status for error
-            updateHeaderStatus('error', 'Connection Failed');
+            // Update header with total count
+            headerFileName.textContent = 'Google Sheets Data';
+            headerRecordCount.textContent = `${(totalRows-1).toLocaleString()} records`;
+            updateHeaderStatus('connecting', 'Loading...', (totalRows-1));
             
-            showNotification(`❌ Failed to connect to Google Sheets. Using sample data.`, 'warning');
-            headerFileName.textContent = 'Using sample data (Demo Mode)';
-            headerRecordCount.textContent = 'Demo Mode';
-            
-            // Fallback: Use sample data
-            useSampleData();
-            return false;
-        } finally {
-            loadGoogleSheetsDataBtn.innerHTML = '<i class="fab fa-google"></i> Refresh Data';
-            loadGoogleSheetsDataBtn.disabled = false;
-        }
-    }
-    
-    // Parse CSV data from text
-    function parseCSVData(csvText) {
-        try {
-            // Clean the CSV text - remove BOM and weird characters
-            const cleanCsv = csvText.replace(/^\uFEFF/, '').trim();
-            const lines = cleanCsv.split('\n');
-            
-            if (lines.length < 2) {
-                console.error('CSV has no data lines');
-                return false;
-            }
-            
-            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
-            
-            console.log('Headers found:', headers);
-            
-            // Find column indices with flexible matching
-            const userIdIndex = headers.findIndex(h => 
-                h.includes('userid') || h.includes('user') || h.includes('id') || h.includes('user_id')
-            );
-            
-            const numberIndex = headers.findIndex(h => 
-                h.includes('number') || h.includes('phone') || h.includes('mobile') || h.includes('contact')
-            );
-            
-            const branchIndex = headers.findIndex(h => 
-                h.includes('branch') || h.includes('location') || h.includes('office')
-            );
-            
-            const statusIndex = headers.findIndex(h => 
-                h.includes('status') || h.includes('state') || h.includes('condition')
-            );
-            
-            if (userIdIndex === -1 || numberIndex === -1) {
-                console.error('Required columns not found. Headers:', headers);
-                showNotification('CSV must have UserID and Number columns', 'warning');
-                return false;
-            }
-            
-            // Parse data
+            // Load data in batches
             uploadedData = [];
             branches.clear();
             
-            for (let i = 1; i < lines.length; i++) {
-                if (lines[i].trim() === '') continue;
+            // Get headers first
+            const headers = await getHeaders(sheetName);
+            
+            // Start from row 2 (assuming row 1 is headers)
+            for (let startRow = 2; startRow <= totalRows; startRow += BATCH_SIZE) {
+                const endRow = Math.min(startRow + BATCH_SIZE - 1, totalRows);
                 
-                const columns = parseCSVLine(lines[i]);
-                if (columns.length >= Math.max(userIdIndex, numberIndex) + 1) {
-                    const userId = columns[userIdIndex]?.replace(/"/g, '').trim() || '';
-                    const number = columns[numberIndex]?.replace(/"/g, '').trim() || '';
-                    const branch = branchIndex !== -1 && columns[branchIndex] ? 
-                        columns[branchIndex].replace(/"/g, '').trim() || 'Unknown' : 'Unknown';
-                    const status = statusIndex !== -1 && columns[statusIndex] ? 
-                        columns[statusIndex].replace(/"/g, '').trim() || 'Active' : 'Active';
+                // Use range query to fetch only the needed rows
+                const range = `${sheetName}!A${startRow}:Z${endRow}`;
+                const batchUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(range)}?key=${GOOGLE_API_KEY}&majorDimension=ROWS`;
+                
+                const batchResponse = await fetchWithRetry(batchUrl, 3);
+                
+                if (batchResponse.ok) {
+                    const batchData = await batchResponse.json();
                     
-                    if (userId && number) {
-                        uploadedData.push({
-                            userId: userId,
-                            number: number,
-                            branch: branch,
-                            status: status
-                        });
+                    if (batchData.values) {
+                        // Process this batch
+                        processBatch(batchData.values, headers);
                         
-                        if (branch !== 'Unknown') {
-                            branches.add(branch);
-                        }
+                        // Update progress silently
+                        headerRecordCount.textContent = `${uploadedData.length.toLocaleString()} records`;
+                        totalRecords.textContent = uploadedData.length.toLocaleString();
                     }
                 }
+                
+                // Small delay to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 200));
             }
             
-            console.log(`Parsed ${uploadedData.length} records`);
-            
-            // Auto-search if there's already a search term
-            if (headerSearchInput.value.trim()) {
-                performSearch(headerSearchInput.value.trim());
+            if (uploadedData.length > 0) {
+                updateHeaderStatus('connected', 'Connected', uploadedData.length);
+                showNotification(`✅ Successfully loaded ${uploadedData.length.toLocaleString()} records`, 'success');
+                updateStats();
+            } else {
+                throw new Error('No data loaded');
             }
-            
-            return uploadedData.length > 0;
             
         } catch (error) {
-            console.error('Error parsing CSV data:', error);
-            showNotification('Error parsing CSV data', 'warning');
-            return false;
+            console.error('Loading failed:', error);
+            updateHeaderStatus('error', 'Connection Failed');
+            loadSampleData();
+            showNotification(`❌ Error: ${error.message}`, 'warning');
+        }
+        
+        loadGoogleSheetsDataBtn.innerHTML = '<i class="fab fa-google"></i> Refresh Data';
+        loadGoogleSheetsDataBtn.disabled = false;
+        isLoading = false;
+    }
+    
+    // Helper function to get headers
+    async function getHeaders(sheetName) {
+        try {
+            const headerUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName + '!1:1')}?key=${GOOGLE_API_KEY}`;
+            const response = await fetch(headerUrl);
+            const data = await response.json();
+            return data.values ? data.values[0] : [];
+        } catch (error) {
+            return [];
         }
     }
     
-    // Helper function to parse CSV line
-    function parseCSVLine(line) {
-        const result = [];
-        let current = '';
-        let inQuotes = false;
-        
-        for (let i = 0; i < line.length; i++) {
-            const char = line[i];
+    // Process a batch of data
+    function processBatch(rows, headers) {
+        for (const row of rows) {
+            if (!row || row.length < 2) continue;
             
-            if (char === '"') {
-                inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
-                result.push(current);
-                current = '';
+            // Safely get values with null checks
+            let userId = '';
+            let number = '';
+            let branch = 'Unknown';
+            let status = 'Active';
+            
+            if (headers.length > 0) {
+                // Try to find columns by header name
+                const userIdIdx = headers.findIndex(h => 
+                    h && h.toString().toLowerCase().includes('user') || 
+                    h && h.toString().toLowerCase().includes('id')
+                );
+                const numberIdx = headers.findIndex(h => 
+                    h && h.toString().toLowerCase().includes('number') || 
+                    h && h.toString().toLowerCase().includes('phone') || 
+                    h && h.toString().toLowerCase().includes('mobile')
+                );
+                const branchIdx = headers.findIndex(h => 
+                    h && h.toString().toLowerCase().includes('branch') || 
+                    h && h.toString().toLowerCase().includes('location')
+                );
+                const statusIdx = headers.findIndex(h => 
+                    h && h.toString().toLowerCase().includes('status')
+                );
+                
+                userId = userIdIdx !== -1 && row[userIdIdx] ? row[userIdIdx].toString().trim() : (row[0] ? row[0].toString().trim() : '');
+                number = numberIdx !== -1 && row[numberIdx] ? row[numberIdx].toString().trim() : (row[1] ? row[1].toString().trim() : '');
+                branch = branchIdx !== -1 && row[branchIdx] ? row[branchIdx].toString().trim() : (row[2] ? row[2].toString().trim() : 'Unknown');
+                status = statusIdx !== -1 && row[statusIdx] ? row[statusIdx].toString().trim() : (row[3] ? row[3].toString().trim() : 'Active');
             } else {
-                current += char;
+                // Position-based mapping with null checks
+                userId = row[0] ? row[0].toString().trim() : '';
+                number = row[1] ? row[1].toString().trim() : '';
+                branch = row[2] ? row[2].toString().trim() : 'Unknown';
+                status = row[3] ? row[3].toString().trim() : 'Active';
+            }
+            
+            // Clean phone number - remove any non-digit characters
+            number = cleanPhoneNumber(number);
+            
+            if (userId && number) {
+                uploadedData.push({
+                    userId: userId,
+                    number: number,
+                    branch: branch,
+                    status: status
+                });
+                
+                if (branch && branch !== 'Unknown') branches.add(branch);
             }
         }
-        
-        result.push(current);
-        return result;
     }
     
-    // Fallback sample data
-    function useSampleData() {
+    // Clean phone number to remove formatting
+    function cleanPhoneNumber(number) {
+        if (!number) return '';
+        // Remove all non-digit characters
+        return number.replace(/\D/g, '');
+    }
+    
+    // Format phone number for display (without dashes, just the number)
+    function formatPhoneNumber(number) {
+        if (!number) return '';
+        // Just return the number without any formatting
+        return number;
+    }
+    
+    // Fetch with retry logic
+    async function fetchWithRetry(url, maxRetries) {
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                const response = await fetch(url);
+                if (response.status === 429) { // Rate limited
+                    const waitTime = Math.pow(2, i) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    continue;
+                }
+                return response;
+            } catch (error) {
+                if (i === maxRetries - 1) throw error;
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+        throw new Error('Max retries exceeded');
+    }
+    
+    // Load sample data as fallback
+    function loadSampleData() {
         uploadedData = [
-            { userId: 'bbc1234', number: '91600000000', branch: 'Mumbai', status: 'Active' },
-            { userId: 'bbc5678', number: '91777777777', branch: 'Delhi', status: 'Active' },
-            { userId: 'bbc9012', number: '91888888888', branch: 'Bangalore', status: 'Inactive' },
-            { userId: 'bbc3456', number: '91999999999', branch: 'Chennai', status: 'Active' },
-            { userId: 'bbc7890', number: '91555555555', branch: 'Kolkata', status: 'Pending' }
+            { userId: 'SAMPLE001', number: '918096475595', branch: 'Head Office', status: 'Active' },
+            { userId: 'SAMPLE002', number: '918096475596', branch: 'Head Office', status: 'Active' },
+            { userId: 'SAMPLE003', number: '918096475597', branch: 'Mumbai', status: 'Active' }
         ];
-        
         branches.clear();
         uploadedData.forEach(item => {
-            if (item.branch !== 'Unknown') {
-                branches.add(item.branch);
-            }
+            if (item.branch) branches.add(item.branch);
         });
-        
-        updateFileInfo('Sample Data (Demo Mode)', uploadedData.length);
         updateStats();
-        
-        // Update header status for demo mode
-        updateHeaderStatus('connected', 'Demo Mode', uploadedData.length);
-        
-        showNotification(`Using sample data (${uploadedData.length} records)`, 'info');
+        updateHeaderStatus('connected', 'Sample Mode', uploadedData.length);
     }
     
-    // Update file info display in header
-    function updateFileInfo(name, count) {
-        headerFileInfo.style.display = 'block';
-        headerFileName.textContent = name;
-        headerRecordCount.textContent = `${count.toLocaleString()} records`;
+    // Update stats
+    function updateStats() {
+        totalRecords.textContent = uploadedData.length.toLocaleString();
+        const activeCount = uploadedData.filter(item => 
+            item.status && item.status.toLowerCase().includes('active')
+        ).length;
+        activeUsers.textContent = activeCount.toLocaleString();
+        totalBranches.textContent = branches.size.toLocaleString();
     }
     
     // Perform search
     function performSearch(searchTerm) {
-        if (!searchTerm) {
-            showNotification('Please enter a search term', 'warning');
-            return;
-        }
-        
-        if (uploadedData.length === 0) {
-            showNotification('Data is still loading, please wait...', 'warning');
-            return;
-        }
+        if (!searchTerm || uploadedData.length === 0) return;
         
         lastSearchTerm = searchTerm;
-        
-        const originalContent = headerSearchBtn.innerHTML;
         headerSearchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         headerSearchBtn.disabled = true;
         
         setTimeout(() => {
+            const cleanSearchTerm = searchTerm.toLowerCase();
             const filteredResults = uploadedData.filter(item => {
-                const cleanSearchTerm = searchTerm.replace(/\s+/g, '').toLowerCase();
-                const cleanUserId = item.userId.replace(/\s+/g, '').toLowerCase();
-                const cleanNumber = item.number.replace(/\s+/g, '').toLowerCase();
+                // Add null checks for all fields
+                const userId = item.userId ? item.userId.toLowerCase() : '';
+                const number = item.number ? item.number.toString() : '';
                 
-                return cleanUserId === cleanSearchTerm || cleanNumber === cleanSearchTerm;
+                return userId.includes(cleanSearchTerm) || number.includes(cleanSearchTerm);
             });
             
             currentResults = filteredResults;
             
-            showResultsSection();
-            updateResultsCount(filteredResults.length);
+            resultsSection.classList.remove('hidden');
+            resultsSection.classList.add('visible');
+            countBadge.textContent = filteredResults.length.toLocaleString();
+            countText.textContent = filteredResults.length === 1 ? 'RESULT FOUND' : 'RESULTS FOUND';
             
             if (filteredResults.length > 0) {
-                displayResults(filteredResults);
-                
+                displayResults(filteredResults.slice(0, 100));
                 resultsTableContainer.classList.remove('hidden');
                 resultsActions.classList.remove('hidden');
                 noResultsMessage.classList.add('hidden');
-                
-                showNotification(`Found ${filteredResults.length} matching records`, 'success');
             } else {
                 resultsTableBody.innerHTML = '';
-                
                 resultsTableContainer.classList.add('hidden');
                 resultsActions.classList.add('hidden');
                 noResultsMessage.classList.remove('hidden');
-                
-                noResultsText.textContent = `No matching records found for "${searchTerm}"`;
-                showNotification(`No matching records found`, 'info');
+                noResultsText.textContent = `No records found for "${searchTerm}"`;
             }
             
-            headerSearchBtn.innerHTML = originalContent;
+            headerSearchBtn.innerHTML = '<i class="fas fa-search"></i>';
             headerSearchBtn.disabled = false;
+            
+            // Scroll to results
+            resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 300);
     }
     
-    // Show results section
-    function showResultsSection() {
-        resultsSection.classList.remove('hidden');
-        resultsSection.classList.add('visible');
-        
-        setTimeout(() => {
-            resultsSection.scrollIntoView({ 
-                behavior: 'smooth', 
-                block: 'start' 
-            });
-        }, 100);
-    }
-    
-    // Hide results section
-    function hideResultsSection() {
-        resultsSection.classList.remove('visible');
-        resultsSection.classList.add('hidden');
-        
-        headerSearchInput.value = '';
-        lastSearchTerm = '';
-        currentResults = [];
-        
-        resultsTableBody.innerHTML = '';
-        resultsTableContainer.classList.add('hidden');
-        resultsActions.classList.add('hidden');
-        noResultsMessage.classList.add('hidden');
-        
-        updateResultsCount(0);
-        showNotification('Results cleared', 'info');
-    }
-    
-    // Display results in table
+    // Display results
     function displayResults(results) {
         resultsTableBody.innerHTML = '';
         
         results.forEach(item => {
             const row = document.createElement('tr');
             
+            // Add null checks for status
             let statusClass = 'status-active';
-            const statusLower = item.status.toLowerCase();
-            
-            if (statusLower.includes('inactive') || statusLower.includes('expired')) {
-                statusClass = 'status-inactive';
-            } else if (statusLower.includes('pending') || statusLower.includes('waiting')) {
-                statusClass = 'status-pending';
+            if (item.status) {
+                const statusLower = item.status.toLowerCase();
+                if (statusLower.includes('inactive') || statusLower.includes('expired')) {
+                    statusClass = 'status-inactive';
+                } else if (statusLower.includes('pending') || statusLower.includes('waiting')) {
+                    statusClass = 'status-pending';
+                }
             }
             
             row.innerHTML = `
-                <td>${item.userId}</td>
-                <td>${formatPhoneNumber(item.number)}</td>
-                <td>${item.branch}</td>
-                <td><span class="${statusClass}">${item.status}</span></td>
+                <td>${escapeHtml(item.userId || '')}</td>
+                <td>${formatPhoneNumber(item.number || '')}</td>
+                <td>${escapeHtml(item.branch || 'Unknown')}</td>
+                <td><span class="${statusClass}">${escapeHtml(item.status || 'Active')}</span></td>
             `;
             
             resultsTableBody.appendChild(row);
         });
     }
     
-    // Format phone number for display
-    function formatPhoneNumber(number) {
-        const digits = number.replace(/\D/g, '');
-        
-        if (digits.length === 11 && digits.startsWith('91')) {
-            return `${digits.slice(0,2)}-${digits.slice(2,7)}-${digits.slice(7)}`;
-        } else if (digits.length === 10) {
-            return `${digits.slice(0,5)}-${digits.slice(5)}`;
-        }
-        
-        return number;
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     
-    // Update results count display
-    function updateResultsCount(count) {
-        countBadge.textContent = count;
-        countText.textContent = count === 1 ? 'RESULT FOUND' : 'RESULTS FOUND';
-    }
-    
-    // Update stats
-    function updateStats() {
-        totalRecords.textContent = uploadedData.length.toLocaleString();
-        
-        const activeCount = uploadedData.filter(item => 
-            item.status.toLowerCase().includes('active')
-        ).length;
-        activeUsers.textContent = activeCount.toLocaleString();
-        
-        totalBranches.textContent = branches.size.toLocaleString();
+    // Hide results section
+    function hideResultsSection() {
+        resultsSection.classList.remove('visible');
+        resultsSection.classList.add('hidden');
+        headerSearchInput.value = '';
+        lastSearchTerm = '';
+        currentResults = [];
+        resultsTableBody.innerHTML = '';
+        resultsTableContainer.classList.add('hidden');
+        resultsActions.classList.add('hidden');
+        noResultsMessage.classList.add('hidden');
+        countBadge.textContent = '0';
+        countText.textContent = 'RESULTS FOUND';
     }
     
     // Export to CSV
     function exportToCSV(data) {
-        if (data.length === 0) return;
-        
-        let csvContent = "UserID,Number,Branch,Status\n";
-        
+        let csv = "UserID,Number,Branch,Status\n";
         data.forEach(item => {
-            csvContent += `"${item.userId}","${item.number}","${item.branch}","${item.status}"\n`;
+            csv += `"${item.userId || ''}","${item.number || ''}","${item.branch || 'Unknown'}","${item.status || 'Active'}"\n`;
         });
         
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        const timestamp = new Date().toISOString().slice(0,19).replace(/[:]/g, '-');
-        a.download = `search_results_${timestamp}.csv`;
+        a.download = `search_results_${Date.now()}.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        
-        showNotification(`Exported ${data.length} records as CSV`, 'success');
+        URL.revokeObjectURL(url);
+        showNotification(`Exported ${data.length} records`, 'success');
     }
     
     // Notification system
     function showNotification(message, type) {
-        const existingNotifications = document.querySelectorAll('.notification');
-        existingNotifications.forEach(notification => {
-            notification.remove();
-        });
+        // Remove existing notifications
+        document.querySelectorAll('.notification').forEach(n => n.remove());
         
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
@@ -607,121 +458,50 @@ document.addEventListener('DOMContentLoaded', function() {
         
         document.body.appendChild(notification);
         
-        // Add notification styles if not already present
-        if (!document.getElementById('notification-styles')) {
+        // Add styles if not present
+        if (!document.getElementById('notif-styles')) {
             const style = document.createElement('style');
-            style.id = 'notification-styles';
+            style.id = 'notif-styles';
             style.textContent = `
                 .notification {
-                    position: fixed;
-                    top: 20px;
-                    right: 20px;
-                    background: white;
-                    border-radius: 8px;
-                    padding: 15px 20px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
-                    z-index: 1000;
-                    min-width: 300px;
-                    max-width: 400px;
-                    animation: slideIn 0.3s ease;
-                    border-left: 4px solid #4caf50;
+                    position: fixed; top: 20px; right: 20px; background: white;
+                    border-radius: 8px; padding: 15px 20px; display: flex;
+                    align-items: center; justify-content: space-between;
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.15); z-index: 1000;
+                    min-width: 300px; max-width: 400px;
+                    animation: slideIn 0.3s ease; border-left: 4px solid #4caf50;
                 }
-                
-                .notification-warning {
-                    border-left-color: #ff9800;
-                }
-                
-                .notification-info {
-                    border-left-color: #2196f3;
-                }
-                
-                .notification-content {
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                    flex-grow: 1;
-                }
-                
-                .notification-content i {
-                    font-size: 1.2rem;
-                }
-                
-                .notification-success .notification-content i {
-                    color: #4caf50;
-                }
-                
-                .notification-warning .notification-content i {
-                    color: #ff9800;
-                }
-                
-                .notification-info .notification-content i {
-                    color: #2196f3;
-                }
-                
+                .notification-warning { border-left-color: #ff9800; }
+                .notification-info { border-left-color: #2196f3; }
+                .notification-content { display: flex; align-items: center; gap: 10px; }
                 .notification-close {
-                    background: none;
-                    border: none;
-                    cursor: pointer;
-                    color: #888;
-                    font-size: 1rem;
-                    margin-left: 15px;
-                    padding: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    width: 24px;
-                    height: 24px;
+                    background: none; border: none; cursor: pointer; color: #888;
+                    margin-left: 15px; width: 24px; height: 24px;
                 }
-                
-                .notification-close:hover {
-                    color: #333;
-                }
-                
+                .notification-close:hover { color: #333; }
                 @keyframes slideIn {
-                    from {
-                        transform: translateX(100%);
-                        opacity: 0;
-                    }
-                    to {
-                        transform: translateX(0);
-                        opacity: 1;
-                    }
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0%); opacity: 1; }
                 }
-                
                 @keyframes slideOut {
-                    from {
-                        transform: translateX(0);
-                        opacity: 1;
-                    }
-                    to {
-                        transform: translateX(100%);
-                        opacity: 0;
-                    }
+                    from { transform: translateX(0%); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
                 }
             `;
             document.head.appendChild(style);
         }
         
-        notification.querySelector('.notification-close').addEventListener('click', function() {
+        // Close button functionality
+        notification.querySelector('.notification-close').onclick = () => {
             notification.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.remove();
-                }
-            }, 250);
-        });
+            setTimeout(() => notification.remove(), 250);
+        };
         
+        // Auto remove after 5 seconds
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.style.animation = 'slideOut 0.3s ease';
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.remove();
-                    }
-                }, 250);
+                setTimeout(() => notification.remove(), 250);
             }
         }, 5000);
     }
