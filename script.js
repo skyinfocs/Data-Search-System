@@ -1,14 +1,17 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Elements
+    // ===== ELEMENTS =====
     const headerSearchBtn = document.getElementById('headerSearchBtn');
     const headerSearchInput = document.getElementById('headerSearchInput');
-    const headerFileInfo = document.getElementById('headerFileInfo');
     const headerFileName = document.getElementById('headerFileName');
     const headerRecordCount = document.getElementById('headerRecordCount');
     const loadGoogleSheetsDataBtn = document.getElementById('loadGoogleSheetsDataBtn');
     const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
     const headerRecordBadge = document.getElementById('headerRecordBadge');
+    const lastRefreshTime = document.getElementById('lastRefreshTime');
+    const refreshTimer = document.getElementById('refreshTimer');
+    const refreshSpinner = document.getElementById('refreshSpinner');
+    const nextRefreshNote = document.getElementById('nextRefreshNote');
     const resultsSection = document.querySelector('.results-section');
     const resultsTableBody = document.getElementById('resultsTableBody');
     const resultsTableContainer = document.querySelector('.results-table-container');
@@ -17,36 +20,46 @@ document.addEventListener('DOMContentLoaded', function() {
     const resultsActions = document.querySelector('.results-actions');
     const exportBtn = document.querySelector('.export-btn');
     const clearBtn = document.querySelector('.clear-btn');
-    const refreshSearchBtn = document.getElementById('refreshSearchBtn');
     const countBadge = document.querySelector('.count-badge');
-    const countText = document.querySelector('.results-count span:last-child');
     const totalRecords = document.getElementById('totalRecords');
     const activeUsers = document.getElementById('activeUsers');
     const totalBranches = document.getElementById('totalBranches');
     const googleSheetsViewLink = document.getElementById('googleSheetsViewLink');
+    const autoRefreshToggle = document.getElementById('autoRefreshToggle');
     
     // Search tags
     const searchTags = document.querySelectorAll('.search-tag');
     
-    // Application state
+    // ===== STATE =====
     let uploadedData = [];
     let currentResults = [];
     let branches = new Set();
-    let lastSearchTerm = '';
     let isLoading = false;
+    let autoRefreshEnabled = true;
+    let refreshTimerInterval = null;
+    let countdownInterval = null;
+    let lastLoadTime = null;
+    let secondsRemaining = 300; // 5 minutes = 300 seconds
     
-    // ===== YOUR CORRECT CONFIGURATION =====
+    // ===== CONFIGURATION =====
     const SPREADSHEET_ID = '1p-fxYDbWxajcqmeKlTbOV7oLbRTD2z6J3ickMAnS-lg';
     const GOOGLE_API_KEY = 'AIzaSyDkJbduR9SWGEuIu7pFlng_SYJBQxOf5m0';
     const VIEW_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit?gid=0`;
-    
-    // Batch size - optimal for large datasets
     const BATCH_SIZE = 10000;
+    const REFRESH_INTERVAL = 300; // 5 minutes in seconds
     
-    // Initialize
+    // ===== INITIALIZE =====
     loadDataFromGoogleSheets();
+    startCountdown();
     
-    // Event Listeners
+    // Set view link
+    if (googleSheetsViewLink) {
+        googleSheetsViewLink.href = VIEW_URL;
+    }
+    
+    // ===== EVENT LISTENERS =====
+    
+    // Search tags
     searchTags.forEach(tag => {
         tag.addEventListener('click', function() {
             headerSearchInput.value = this.getAttribute('data-search');
@@ -54,34 +67,51 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    loadGoogleSheetsDataBtn.addEventListener('click', loadDataFromGoogleSheets);
-    
+    // Search button
     headerSearchBtn.addEventListener('click', () => {
-        if (headerSearchInput.value.trim()) performSearch(headerSearchInput.value.trim());
+        if (headerSearchInput.value.trim()) {
+            performSearch(headerSearchInput.value.trim());
+        }
     });
     
+    // Enter key in search input
     headerSearchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && headerSearchInput.value.trim()) {
             performSearch(headerSearchInput.value.trim());
         }
     });
     
-    exportBtn.addEventListener('click', () => {
-        if (currentResults.length > 0) exportToCSV(currentResults);
+    // Refresh button
+    loadGoogleSheetsDataBtn.addEventListener('click', () => {
+        loadDataFromGoogleSheets();
+        resetCountdown();
     });
     
-    clearBtn.addEventListener('click', hideResultsSection);
-    
-    refreshSearchBtn.addEventListener('click', () => {
-        if (lastSearchTerm) {
-            headerSearchInput.value = lastSearchTerm;
-            performSearch(lastSearchTerm);
+    // Auto refresh toggle
+    autoRefreshToggle.addEventListener('change', (e) => {
+        autoRefreshEnabled = e.target.checked;
+        if (autoRefreshEnabled) {
+            startCountdown();
+            showNotification('Auto refresh enabled - updates every 5 minutes', 'success');
+        } else {
+            stopCountdown();
+            if (refreshTimer) refreshTimer.textContent = 'OFF';
+            if (nextRefreshNote) nextRefreshNote.textContent = 'Auto refresh disabled';
+            showNotification('Auto refresh disabled', 'info');
         }
     });
     
-    if (googleSheetsViewLink) {
-        googleSheetsViewLink.href = VIEW_URL;
-    }
+    // Export button
+    exportBtn.addEventListener('click', () => {
+        if (currentResults.length > 0) {
+            exportToCSV(currentResults);
+        }
+    });
+    
+    // Clear button
+    clearBtn.addEventListener('click', hideResultsSection);
+    
+    // ===== FUNCTIONS =====
     
     // Update header status
     function updateHeaderStatus(status, message, recordCount = null) {
@@ -92,6 +122,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 statusDot.classList.add('connecting');
                 statusText.textContent = message || 'Connecting...';
                 headerRecordBadge.style.display = 'none';
+                if (refreshSpinner) refreshSpinner.style.display = 'inline-block';
                 break;
                 
             case 'connected':
@@ -101,226 +132,211 @@ document.addEventListener('DOMContentLoaded', function() {
                     headerRecordBadge.textContent = recordCount.toLocaleString();
                     headerRecordBadge.style.display = 'inline-block';
                 }
+                if (refreshSpinner) refreshSpinner.style.display = 'none';
                 break;
                 
             case 'error':
                 statusDot.classList.add('error');
                 statusText.textContent = message || 'Connection Failed';
                 headerRecordBadge.style.display = 'none';
+                if (refreshSpinner) refreshSpinner.style.display = 'none';
                 break;
         }
     }
     
-    // Main function to load data in batches
+    // Update last refresh time
+    function updateLastRefreshTime() {
+        if (!lastRefreshTime) return;
+        
+        const now = new Date();
+        const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        lastRefreshTime.innerHTML = `<i class="fas fa-clock"></i><span>Last: ${timeString}</span>`;
+    }
+    
+    // Start countdown timer
+    function startCountdown() {
+        if (countdownInterval) clearInterval(countdownInterval);
+        
+        secondsRemaining = REFRESH_INTERVAL;
+        updateTimerDisplay();
+        
+        countdownInterval = setInterval(() => {
+            if (!autoRefreshEnabled) return;
+            
+            secondsRemaining--;
+            
+            if (secondsRemaining <= 0) {
+                // Time to refresh
+                if (autoRefreshEnabled && !isLoading) {
+                    loadDataFromGoogleSheets();
+                }
+                secondsRemaining = REFRESH_INTERVAL;
+            }
+            
+            updateTimerDisplay();
+        }, 1000);
+    }
+    
+    // Stop countdown timer
+    function stopCountdown() {
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+        }
+    }
+    
+    // Reset countdown timer
+    function resetCountdown() {
+        secondsRemaining = REFRESH_INTERVAL;
+        updateTimerDisplay();
+    }
+    
+    // Update timer display
+    function updateTimerDisplay() {
+        if (!refreshTimer || !nextRefreshNote) return;
+        
+        const minutes = Math.floor(secondsRemaining / 60);
+        const seconds = secondsRemaining % 60;
+        const timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        refreshTimer.textContent = timeString;
+        
+        if (autoRefreshEnabled) {
+            nextRefreshNote.textContent = `Next refresh in ${timeString}`;
+        } else {
+            nextRefreshNote.textContent = 'Auto refresh disabled';
+        }
+    }
+    
+    // Load data from Google Sheets
     async function loadDataFromGoogleSheets() {
         if (isLoading) return;
         isLoading = true;
         
-        headerFileName.textContent = 'Loading data...';
+        headerFileName.textContent = 'Loading...';
         headerRecordCount.textContent = 'Please wait...';
-        loadGoogleSheetsDataBtn.innerHTML = '<div class="loading-spinner"></div> Loading...';
         loadGoogleSheetsDataBtn.disabled = true;
+        headerSearchBtn.disabled = true;
         
-        updateHeaderStatus('connecting', 'Loading records...');
-        showNotification('Starting to load 296,000+ records...', 'info');
+        updateHeaderStatus('connecting', 'Loading...');
+        showNotification('Loading data from Google Sheets...', 'info');
         
         try {
-            // First, get the total number of rows
+            // Get metadata
             const metadataUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?key=${GOOGLE_API_KEY}`;
             const metadataResponse = await fetch(metadataUrl);
             
             if (!metadataResponse.ok) {
-                throw new Error('Failed to get sheet metadata');
+                throw new Error('Failed to connect to Google Sheets');
             }
             
             const metadata = await metadataResponse.json();
             const sheetName = metadata.sheets[0].properties.title;
             const totalRows = metadata.sheets[0].properties.gridProperties.rowCount;
             
-            // Update header with total count
-            headerFileName.textContent = 'Google Sheets Data';
-            headerRecordCount.textContent = `${(totalRows-1).toLocaleString()} records`;
-            updateHeaderStatus('connecting', 'Loading...', (totalRows-1));
-            
             // Load data in batches
             uploadedData = [];
             branches.clear();
             
-            // Get headers first
-            const headers = await getHeaders(sheetName);
-            
-            // Start from row 2 (assuming row 1 is headers)
             for (let startRow = 2; startRow <= totalRows; startRow += BATCH_SIZE) {
                 const endRow = Math.min(startRow + BATCH_SIZE - 1, totalRows);
-                
-                // Use range query to fetch only the needed rows
                 const range = `${sheetName}!A${startRow}:Z${endRow}`;
-                const batchUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(range)}?key=${GOOGLE_API_KEY}&majorDimension=ROWS`;
+                const batchUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(range)}?key=${GOOGLE_API_KEY}`;
                 
-                const batchResponse = await fetchWithRetry(batchUrl, 3);
+                const batchResponse = await fetch(batchUrl);
                 
                 if (batchResponse.ok) {
                     const batchData = await batchResponse.json();
-                    
                     if (batchData.values) {
-                        // Process this batch
-                        processBatch(batchData.values, headers);
-                        
-                        // Update progress silently
-                        headerRecordCount.textContent = `${uploadedData.length.toLocaleString()} records`;
-                        totalRecords.textContent = uploadedData.length.toLocaleString();
+                        processBatch(batchData.values);
                     }
                 }
                 
-                // Small delay to avoid rate limiting
-                await new Promise(resolve => setTimeout(resolve, 200));
+                // Update progress
+                headerRecordCount.textContent = `${uploadedData.length.toLocaleString()} records`;
+                totalRecords.textContent = uploadedData.length.toLocaleString();
             }
             
             if (uploadedData.length > 0) {
+                headerFileName.textContent = 'Google Sheets Data';
+                headerRecordCount.textContent = `${uploadedData.length.toLocaleString()} records`;
                 updateHeaderStatus('connected', 'Connected', uploadedData.length);
-                showNotification(`✅ Successfully loaded ${uploadedData.length.toLocaleString()} records`, 'success');
                 updateStats();
+                updateLastRefreshTime();
+                resetCountdown();
+                showNotification(`✅ Loaded ${uploadedData.length.toLocaleString()} records`, 'success');
+                lastLoadTime = new Date();
             } else {
                 throw new Error('No data loaded');
             }
             
         } catch (error) {
-            console.error('Loading failed:', error);
+            console.error('Error:', error);
             updateHeaderStatus('error', 'Connection Failed');
             loadSampleData();
-            showNotification(`❌ Error: ${error.message}`, 'warning');
+            showNotification('❌ Failed to connect. Using sample data.', 'warning');
         }
         
-        loadGoogleSheetsDataBtn.innerHTML = '<i class="fab fa-google"></i> Refresh Data';
         loadGoogleSheetsDataBtn.disabled = false;
+        headerSearchBtn.disabled = false;
         isLoading = false;
     }
     
-    // Helper function to get headers
-    async function getHeaders(sheetName) {
-        try {
-            const headerUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName + '!1:1')}?key=${GOOGLE_API_KEY}`;
-            const response = await fetch(headerUrl);
-            const data = await response.json();
-            return data.values ? data.values[0] : [];
-        } catch (error) {
-            return [];
-        }
-    }
-    
-    // Process a batch of data
-    function processBatch(rows, headers) {
+    // Process batch data
+    function processBatch(rows) {
         for (const row of rows) {
             if (!row || row.length < 2) continue;
             
-            // Safely get values with null checks
-            let userId = '';
-            let number = '';
-            let branch = 'Unknown';
-            let status = 'Active';
-            
-            if (headers.length > 0) {
-                // Try to find columns by header name
-                const userIdIdx = headers.findIndex(h => 
-                    h && h.toString().toLowerCase().includes('user') || 
-                    h && h.toString().toLowerCase().includes('id')
-                );
-                const numberIdx = headers.findIndex(h => 
-                    h && h.toString().toLowerCase().includes('number') || 
-                    h && h.toString().toLowerCase().includes('phone') || 
-                    h && h.toString().toLowerCase().includes('mobile')
-                );
-                const branchIdx = headers.findIndex(h => 
-                    h && h.toString().toLowerCase().includes('branch') || 
-                    h && h.toString().toLowerCase().includes('location')
-                );
-                const statusIdx = headers.findIndex(h => 
-                    h && h.toString().toLowerCase().includes('status')
-                );
-                
-                userId = userIdIdx !== -1 && row[userIdIdx] ? row[userIdIdx].toString().trim() : (row[0] ? row[0].toString().trim() : '');
-                number = numberIdx !== -1 && row[numberIdx] ? row[numberIdx].toString().trim() : (row[1] ? row[1].toString().trim() : '');
-                branch = branchIdx !== -1 && row[branchIdx] ? row[branchIdx].toString().trim() : (row[2] ? row[2].toString().trim() : 'Unknown');
-                status = statusIdx !== -1 && row[statusIdx] ? row[statusIdx].toString().trim() : (row[3] ? row[3].toString().trim() : 'Active');
-            } else {
-                // Position-based mapping with null checks
-                userId = row[0] ? row[0].toString().trim() : '';
-                number = row[1] ? row[1].toString().trim() : '';
-                branch = row[2] ? row[2].toString().trim() : 'Unknown';
-                status = row[3] ? row[3].toString().trim() : 'Active';
-            }
-            
-            // Clean phone number - remove any non-digit characters
-            number = cleanPhoneNumber(number);
+            const userId = row[0] ? row[0].toString().trim() : '';
+            let number = row[1] ? row[1].toString().trim() : '';
             
             if (userId && number) {
-                uploadedData.push({
-                    userId: userId,
-                    number: number,
-                    branch: branch,
-                    status: status
-                });
+                number = number.replace(/\D/g, '');
+                const branch = row[2] ? row[2].toString().trim() : 'Unknown';
+                const status = row[3] ? row[3].toString().trim() : 'Active';
                 
-                if (branch && branch !== 'Unknown') branches.add(branch);
-            }
-        }
-    }
-    
-    // Clean phone number to remove formatting
-    function cleanPhoneNumber(number) {
-        if (!number) return '';
-        // Remove all non-digit characters
-        return number.replace(/\D/g, '');
-    }
-    
-    // Format phone number for display (without dashes, just the number)
-    function formatPhoneNumber(number) {
-        if (!number) return '';
-        // Just return the number without any formatting
-        return number;
-    }
-    
-    // Fetch with retry logic
-    async function fetchWithRetry(url, maxRetries) {
-        for (let i = 0; i < maxRetries; i++) {
-            try {
-                const response = await fetch(url);
-                if (response.status === 429) { // Rate limited
-                    const waitTime = Math.pow(2, i) * 1000;
-                    await new Promise(resolve => setTimeout(resolve, waitTime));
-                    continue;
+                uploadedData.push({ userId, number, branch, status });
+                
+                if (branch && branch !== 'Unknown') {
+                    branches.add(branch);
                 }
-                return response;
-            } catch (error) {
-                if (i === maxRetries - 1) throw error;
-                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
-        throw new Error('Max retries exceeded');
     }
     
-    // Load sample data as fallback
+    // Load sample data
     function loadSampleData() {
         uploadedData = [
-            { userId: 'SAMPLE001', number: '918096475595', branch: 'Head Office', status: 'Active' },
-            { userId: 'SAMPLE002', number: '918096475596', branch: 'Head Office', status: 'Active' },
-            { userId: 'SAMPLE003', number: '918096475597', branch: 'Mumbai', status: 'Active' }
+            { userId: 'ADMIN001', number: '918096475595', branch: 'Head Office', status: 'Active' },
+            { userId: 'ADMIN002', number: '918096475596', branch: 'Head Office', status: 'Active' },
+            { userId: 'USER1001', number: '91600000001', branch: 'Mumbai', status: 'Active' },
+            { userId: 'USER1002', number: '91600000002', branch: 'Mumbai', status: 'Inactive' }
         ];
+        
         branches.clear();
         uploadedData.forEach(item => {
-            if (item.branch) branches.add(item.branch);
+            if (item.branch && item.branch !== 'Unknown') {
+                branches.add(item.branch);
+            }
         });
-        updateStats();
+        
+        headerFileName.textContent = 'Sample Data';
+        headerRecordCount.textContent = `${uploadedData.length} records`;
         updateHeaderStatus('connected', 'Sample Mode', uploadedData.length);
+        updateStats();
+        updateLastRefreshTime();
+        resetCountdown();
     }
     
     // Update stats
     function updateStats() {
         totalRecords.textContent = uploadedData.length.toLocaleString();
+        
         const activeCount = uploadedData.filter(item => 
             item.status && item.status.toLowerCase().includes('active')
         ).length;
         activeUsers.textContent = activeCount.toLocaleString();
+        
         totalBranches.textContent = branches.size.toLocaleString();
     }
     
@@ -328,18 +344,15 @@ document.addEventListener('DOMContentLoaded', function() {
     function performSearch(searchTerm) {
         if (!searchTerm || uploadedData.length === 0) return;
         
-        lastSearchTerm = searchTerm;
-        headerSearchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         headerSearchBtn.disabled = true;
         
         setTimeout(() => {
-            const cleanSearchTerm = searchTerm.toLowerCase();
+            const cleanTerm = searchTerm.toLowerCase().trim();
+            
             const filteredResults = uploadedData.filter(item => {
-                // Add null checks for all fields
                 const userId = item.userId ? item.userId.toLowerCase() : '';
                 const number = item.number ? item.number.toString() : '';
-                
-                return userId.includes(cleanSearchTerm) || number.includes(cleanSearchTerm);
+                return userId.includes(cleanTerm) || number.includes(cleanTerm);
             });
             
             currentResults = filteredResults;
@@ -347,25 +360,23 @@ document.addEventListener('DOMContentLoaded', function() {
             resultsSection.classList.remove('hidden');
             resultsSection.classList.add('visible');
             countBadge.textContent = filteredResults.length.toLocaleString();
-            countText.textContent = filteredResults.length === 1 ? 'RESULT FOUND' : 'RESULTS FOUND';
             
             if (filteredResults.length > 0) {
                 displayResults(filteredResults.slice(0, 100));
                 resultsTableContainer.classList.remove('hidden');
                 resultsActions.classList.remove('hidden');
                 noResultsMessage.classList.add('hidden');
+                showNotification(`Found ${filteredResults.length} records`, 'success');
             } else {
                 resultsTableBody.innerHTML = '';
                 resultsTableContainer.classList.add('hidden');
                 resultsActions.classList.add('hidden');
                 noResultsMessage.classList.remove('hidden');
                 noResultsText.textContent = `No records found for "${searchTerm}"`;
+                showNotification('No records found', 'info');
             }
             
-            headerSearchBtn.innerHTML = '<i class="fas fa-search"></i>';
             headerSearchBtn.disabled = false;
-            
-            // Scroll to results
             resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 300);
     }
@@ -377,20 +388,16 @@ document.addEventListener('DOMContentLoaded', function() {
         results.forEach(item => {
             const row = document.createElement('tr');
             
-            // Add null checks for status
             let statusClass = 'status-active';
             if (item.status) {
                 const statusLower = item.status.toLowerCase();
-                if (statusLower.includes('inactive') || statusLower.includes('expired')) {
-                    statusClass = 'status-inactive';
-                } else if (statusLower.includes('pending') || statusLower.includes('waiting')) {
-                    statusClass = 'status-pending';
-                }
+                if (statusLower.includes('inactive')) statusClass = 'status-inactive';
+                else if (statusLower.includes('pending')) statusClass = 'status-pending';
             }
             
             row.innerHTML = `
                 <td>${escapeHtml(item.userId || '')}</td>
-                <td>${formatPhoneNumber(item.number || '')}</td>
+                <td>${item.number || ''}</td>
                 <td>${escapeHtml(item.branch || 'Unknown')}</td>
                 <td><span class="${statusClass}">${escapeHtml(item.status || 'Active')}</span></td>
             `;
@@ -399,7 +406,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Escape HTML to prevent XSS
+    // Escape HTML
     function escapeHtml(text) {
         if (!text) return '';
         const div = document.createElement('div');
@@ -407,19 +414,17 @@ document.addEventListener('DOMContentLoaded', function() {
         return div.innerHTML;
     }
     
-    // Hide results section
+    // Hide results
     function hideResultsSection() {
         resultsSection.classList.remove('visible');
         resultsSection.classList.add('hidden');
         headerSearchInput.value = '';
-        lastSearchTerm = '';
         currentResults = [];
         resultsTableBody.innerHTML = '';
         resultsTableContainer.classList.add('hidden');
         resultsActions.classList.add('hidden');
         noResultsMessage.classList.add('hidden');
         countBadge.textContent = '0';
-        countText.textContent = 'RESULTS FOUND';
     }
     
     // Export to CSV
@@ -429,23 +434,18 @@ document.addEventListener('DOMContentLoaded', function() {
             csv += `"${item.userId || ''}","${item.number || ''}","${item.branch || 'Unknown'}","${item.status || 'Active'}"\n`;
         });
         
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob([csv], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `search_results_${Date.now()}.csv`;
-        document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
         URL.revokeObjectURL(url);
         showNotification(`Exported ${data.length} records`, 'success');
     }
     
-    // Notification system
+    // Show notification
     function showNotification(message, type) {
-        // Remove existing notifications
-        document.querySelectorAll('.notification').forEach(n => n.remove());
-        
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
         notification.innerHTML = `
@@ -453,56 +453,34 @@ document.addEventListener('DOMContentLoaded', function() {
                 <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
                 <span>${message}</span>
             </div>
-            <button class="notification-close"><i class="fas fa-times"></i></button>
         `;
         
         document.body.appendChild(notification);
         
-        // Add styles if not present
-        if (!document.getElementById('notif-styles')) {
-            const style = document.createElement('style');
-            style.id = 'notif-styles';
-            style.textContent = `
-                .notification {
-                    position: fixed; top: 20px; right: 20px; background: white;
-                    border-radius: 8px; padding: 15px 20px; display: flex;
-                    align-items: center; justify-content: space-between;
-                    box-shadow: 0 5px 15px rgba(0,0,0,0.15); z-index: 1000;
-                    min-width: 300px; max-width: 400px;
-                    animation: slideIn 0.3s ease; border-left: 4px solid #4caf50;
-                }
-                .notification-warning { border-left-color: #ff9800; }
-                .notification-info { border-left-color: #2196f3; }
-                .notification-content { display: flex; align-items: center; gap: 10px; }
-                .notification-close {
-                    background: none; border: none; cursor: pointer; color: #888;
-                    margin-left: 15px; width: 24px; height: 24px;
-                }
-                .notification-close:hover { color: #333; }
-                @keyframes slideIn {
-                    from { transform: translateX(100%); opacity: 0; }
-                    to { transform: translateX(0%); opacity: 1; }
-                }
-                @keyframes slideOut {
-                    from { transform: translateX(0%); opacity: 1; }
-                    to { transform: translateX(100%); opacity: 0; }
-                }
-            `;
-            document.head.appendChild(style);
-        }
-        
-        // Close button functionality
-        notification.querySelector('.notification-close').onclick = () => {
-            notification.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => notification.remove(), 250);
-        };
-        
-        // Auto remove after 5 seconds
         setTimeout(() => {
-            if (notification.parentNode) {
-                notification.style.animation = 'slideOut 0.3s ease';
-                setTimeout(() => notification.remove(), 250);
-            }
-        }, 5000);
+            notification.remove();
+        }, 3000);
     }
+    
+    // Add notification styles
+    const style = document.createElement('style');
+    style.textContent = `
+        .notification {
+            position: fixed; top: 20px; right: 20px; background: white;
+            border-radius: 8px; padding: 15px 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+            z-index: 9999; min-width: 300px; animation: slideIn 0.3s ease;
+            border-left: 4px solid #4caf50;
+        }
+        .notification-warning { border-left-color: #ff9800; }
+        .notification-info { border-left-color: #2196f3; }
+        .notification-content { display: flex; align-items: center; gap: 10px; }
+        .notification-success i { color: #4caf50; }
+        .notification-warning i { color: #ff9800; }
+        .notification-info i { color: #2196f3; }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
 });
