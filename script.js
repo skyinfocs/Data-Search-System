@@ -40,14 +40,21 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentResults = [];
     let branches = new Set();
     let lastSearchTerm = '';
+    let connectionAttempts = 0;
+    const MAX_CONNECTION_ATTEMPTS = 3;
     
     // Google Sheets Configuration - YOUR WORKING LINK
     const GOOGLE_SHEETS_ID = '2PACX-1vRjA6s9KQC0ULV8_DqLEivh09rmwhJpIN8-ItzIG_rObE-EAY5Ipdut_v6iIedwfDA63XFW8lx6exma';
     const GOOGLE_SHEETS_CSV_URL = `https://docs.google.com/spreadsheets/d/e/${GOOGLE_SHEETS_ID}/pub?output=csv`;
     const GOOGLE_SHEETS_VIEW_URL = `https://docs.google.com/spreadsheets/d/e/${GOOGLE_SHEETS_ID}/pubhtml?gid=0&single=true`;
     
-    // CORS proxy (using the one that worked)
-    const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+    // CORS proxy options (trying multiple for better reliability)
+    const CORS_PROXIES = [
+        'https://api.allorigins.win/raw?url=',
+        'https://cors-anywhere.herokuapp.com/',
+        'https://proxy.cors.sh/'
+    ];
+    let currentProxyIndex = 0;
     
     // Initialize - Load data from Google Sheets automatically
     loadDataFromGoogleSheets();
@@ -112,7 +119,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Set the Google Sheets view link
-    googleSheetsViewLink.href = GOOGLE_SHEETS_VIEW_URL;
+    if (googleSheetsViewLink) {
+        googleSheetsViewLink.href = GOOGLE_SHEETS_VIEW_URL;
+    }
     
     // Function to update header status
     function updateHeaderStatus(status, message, recordCount = null) {
@@ -123,77 +132,145 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'connecting':
                 statusDot.classList.add('connecting');
                 statusText.textContent = message || 'Connecting...';
+                headerRecordBadge.style.display = 'none';
                 break;
             case 'connected':
                 statusDot.classList.add('connected');
                 statusText.textContent = message || 'Connected';
                 if (recordCount !== null) {
-                    headerRecordBadge.textContent = recordCount;
+                    headerRecordBadge.textContent = recordCount.toLocaleString();
                     headerRecordBadge.style.display = 'inline-block';
                 }
                 break;
             case 'error':
                 statusDot.classList.add('error');
-                statusText.textContent = message || 'Error';
+                statusText.textContent = message || 'Connection Failed';
+                headerRecordBadge.style.display = 'none';
                 break;
             default:
                 statusText.textContent = message || 'Unknown';
         }
     }
     
+    // Function to try next proxy
+    function getNextProxy() {
+        currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
+        return CORS_PROXIES[currentProxyIndex];
+    }
+    
+    // Function to test connection with timeout
+    async function fetchWithTimeout(url, timeout = 10000) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        
+        try {
+            const response = await fetch(url, { 
+                signal: controller.signal,
+                mode: 'cors',
+                headers: {
+                    'Accept': 'text/csv'
+                }
+            });
+            clearTimeout(timeoutId);
+            return response;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            throw error;
+        }
+    }
+    
     // Function to load data from Google Sheets
     async function loadDataFromGoogleSheets() {
+        // Reset connection attempts
+        connectionAttempts = 0;
+        
         // Show loading state
-        headerFileName.textContent = 'Loading data from Google Sheets...';
+        headerFileName.textContent = 'Connecting to Google Sheets...';
         headerRecordCount.textContent = 'Loading...';
-        loadGoogleSheetsDataBtn.innerHTML = '<div class="loading-spinner"></div> Loading...';
+        loadGoogleSheetsDataBtn.innerHTML = '<div class="loading-spinner"></div> Connecting...';
         loadGoogleSheetsDataBtn.disabled = true;
         
         // Update header status
-        updateHeaderStatus('connecting', 'Loading data...');
+        updateHeaderStatus('connecting', 'Connecting to Google Sheets...');
         
-        showNotification('Loading data from Google Sheets...', 'info');
+        showNotification('Connecting to Google Sheets...', 'info');
         
+        await attemptConnection();
+    }
+    
+    // Function to attempt connection with retry logic
+    async function attemptConnection() {
         try {
-            // Use the working proxy
-            const urlToFetch = CORS_PROXY + encodeURIComponent(GOOGLE_SHEETS_CSV_URL);
+            // Try multiple proxies if needed
+            let lastError = null;
             
-            const response = await fetch(urlToFetch);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const csvText = await response.text();
-            
-            // Parse the CSV data
-            const parseSuccess = parseCSVData(csvText);
-            
-            if (parseSuccess && uploadedData.length > 0) {
-                // Update file info
-                updateFileInfo(`Google Sheets Data Loaded`, uploadedData.length);
-                updateStats();
+            for (let i = 0; i < CORS_PROXIES.length; i++) {
+                const proxy = CORS_PROXIES[currentProxyIndex];
+                const urlToFetch = proxy + encodeURIComponent(GOOGLE_SHEETS_CSV_URL);
                 
-                // Update header status with record count
-                updateHeaderStatus('connected', 'Live', uploadedData.length);
-                
-                showNotification(`Successfully loaded ${uploadedData.length} records from Google Sheets`, 'success');
-            } else {
-                throw new Error('No data parsed from CSV');
+                try {
+                    showNotification(`Attempting connection via proxy ${currentProxyIndex + 1}...`, 'info');
+                    
+                    const response = await fetchWithTimeout(urlToFetch);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const csvText = await response.text();
+                    
+                    // Verify we got actual CSV data
+                    if (csvText.length < 10 || !csvText.includes(',')) {
+                        throw new Error('Invalid CSV data received');
+                    }
+                    
+                    // Parse the CSV data
+                    const parseSuccess = parseCSVData(csvText);
+                    
+                    if (parseSuccess && uploadedData.length > 0) {
+                        // Success! Update UI
+                        updateFileInfo(`Google Sheets Data Loaded`, uploadedData.length);
+                        updateStats();
+                        
+                        // Update header status with record count
+                        updateHeaderStatus('connected', 'Live', uploadedData.length);
+                        
+                        showNotification(`✅ Successfully connected! Loaded ${uploadedData.length} records from Google Sheets`, 'success');
+                        return true;
+                    } else {
+                        throw new Error('No data parsed from CSV');
+                    }
+                    
+                } catch (error) {
+                    console.error(`Proxy ${currentProxyIndex + 1} failed:`, error);
+                    lastError = error;
+                    
+                    // Try next proxy
+                    currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
+                    
+                    // If we've tried all proxies, break and show error
+                    if (i === CORS_PROXIES.length - 1) {
+                        throw lastError;
+                    }
+                    
+                    // Small delay before next attempt
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
             }
             
         } catch (error) {
-            console.error('Error loading data:', error);
+            console.error('All connection attempts failed:', error);
             
             // Update header status for error
-            updateHeaderStatus('error', 'Offline');
+            updateHeaderStatus('error', 'Connection Failed');
             
-            showNotification(`Failed to load data: ${error.message}. Using sample data.`, 'warning');
-            headerFileName.textContent = 'Using sample data';
+            showNotification(`❌ Failed to connect to Google Sheets. Using sample data.`, 'warning');
+            headerFileName.textContent = 'Using sample data (Demo Mode)';
             headerRecordCount.textContent = 'Demo Mode';
             
             // Fallback: Use sample data
             useSampleData();
+            return false;
         } finally {
             loadGoogleSheetsDataBtn.innerHTML = '<i class="fab fa-google"></i> Refresh Data';
             loadGoogleSheetsDataBtn.disabled = false;
@@ -216,21 +293,21 @@ document.addEventListener('DOMContentLoaded', function() {
             
             console.log('Headers found:', headers);
             
-            // Find column indices
+            // Find column indices with flexible matching
             const userIdIndex = headers.findIndex(h => 
-                h.includes('userid') || h.includes('user') || h.includes('id')
+                h.includes('userid') || h.includes('user') || h.includes('id') || h.includes('user_id')
             );
             
             const numberIndex = headers.findIndex(h => 
-                h.includes('number') || h.includes('phone') || h.includes('mobile')
+                h.includes('number') || h.includes('phone') || h.includes('mobile') || h.includes('contact')
             );
             
             const branchIndex = headers.findIndex(h => 
-                h.includes('branch') || h.includes('location')
+                h.includes('branch') || h.includes('location') || h.includes('office')
             );
             
             const statusIndex = headers.findIndex(h => 
-                h.includes('status') || h.includes('state')
+                h.includes('status') || h.includes('state') || h.includes('condition')
             );
             
             if (userIdIndex === -1 || numberIndex === -1) {
@@ -286,32 +363,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Fallback sample data
-    function useSampleData() {
-        uploadedData = [
-            { userId: 'bbc1234', number: '91600000000', branch: 'Mumbai', status: 'Active' },
-            { userId: 'bbc5678', number: '91777777777', branch: 'Delhi', status: 'Active' },
-            { userId: 'bbc9012', number: '91888888888', branch: 'Bangalore', status: 'Inactive' },
-            { userId: 'bbc3456', number: '91999999999', branch: 'Chennai', status: 'Active' },
-            { userId: 'bbc7890', number: '91555555555', branch: 'Kolkata', status: 'Pending' }
-        ];
-        
-        branches.clear();
-        uploadedData.forEach(item => {
-            if (item.branch !== 'Unknown') {
-                branches.add(item.branch);
-            }
-        });
-        
-        updateFileInfo('Sample Data (Demo Mode)', uploadedData.length);
-        updateStats();
-        
-        // Update header status for demo mode
-        updateHeaderStatus('connected', 'Demo', uploadedData.length);
-        
-        showNotification(`Using sample data (${uploadedData.length} records)`, 'info');
-    }
-    
     // Helper function to parse CSV line
     function parseCSVLine(line) {
         const result = [];
@@ -333,6 +384,32 @@ document.addEventListener('DOMContentLoaded', function() {
         
         result.push(current);
         return result;
+    }
+    
+    // Fallback sample data
+    function useSampleData() {
+        uploadedData = [
+            { userId: 'bbc1234', number: '91600000000', branch: 'Mumbai', status: 'Active' },
+            { userId: 'bbc5678', number: '91777777777', branch: 'Delhi', status: 'Active' },
+            { userId: 'bbc9012', number: '91888888888', branch: 'Bangalore', status: 'Inactive' },
+            { userId: 'bbc3456', number: '91999999999', branch: 'Chennai', status: 'Active' },
+            { userId: 'bbc7890', number: '91555555555', branch: 'Kolkata', status: 'Pending' }
+        ];
+        
+        branches.clear();
+        uploadedData.forEach(item => {
+            if (item.branch !== 'Unknown') {
+                branches.add(item.branch);
+            }
+        });
+        
+        updateFileInfo('Sample Data (Demo Mode)', uploadedData.length);
+        updateStats();
+        
+        // Update header status for demo mode
+        updateHeaderStatus('connected', 'Demo Mode', uploadedData.length);
+        
+        showNotification(`Using sample data (${uploadedData.length} records)`, 'info');
     }
     
     // Update file info display in header
@@ -378,22 +455,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 displayResults(filteredResults);
                 
                 resultsTableContainer.classList.remove('hidden');
-                resultsTableContainer.classList.add('visible');
                 resultsActions.classList.remove('hidden');
-                resultsActions.classList.add('visible');
-                noResultsMessage.classList.remove('visible');
                 noResultsMessage.classList.add('hidden');
                 
                 showNotification(`Found ${filteredResults.length} matching records`, 'success');
             } else {
                 resultsTableBody.innerHTML = '';
                 
-                resultsTableContainer.classList.remove('visible');
                 resultsTableContainer.classList.add('hidden');
-                resultsActions.classList.remove('visible');
                 resultsActions.classList.add('hidden');
                 noResultsMessage.classList.remove('hidden');
-                noResultsMessage.classList.add('visible');
                 
                 noResultsText.textContent = `No matching records found for "${searchTerm}"`;
                 showNotification(`No matching records found`, 'info');
@@ -427,11 +498,8 @@ document.addEventListener('DOMContentLoaded', function() {
         currentResults = [];
         
         resultsTableBody.innerHTML = '';
-        resultsTableContainer.classList.remove('visible');
         resultsTableContainer.classList.add('hidden');
-        resultsActions.classList.remove('visible');
         resultsActions.classList.add('hidden');
-        noResultsMessage.classList.remove('visible');
         noResultsMessage.classList.add('hidden');
         
         updateResultsCount(0);
@@ -539,6 +607,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         document.body.appendChild(notification);
         
+        // Add notification styles if not already present
         if (!document.getElementById('notification-styles')) {
             const style = document.createElement('style');
             style.id = 'notification-styles';
