@@ -130,11 +130,7 @@ header {
     background: linear-gradient(to right, #0F9D58, #0B7E44) !important;
 }
 
-.google-sheets-btn:hover {
-    background: linear-gradient(to right, #0B7E44, #0A6337) !important;
-}
-
-/* Connection Status in Header */
+/* Connection Status */
 .connection-status {
     display: flex;
     align-items: center;
@@ -179,9 +175,46 @@ header {
     margin-left: 5px;
 }
 
-/* Hide the file info section */
 .file-info-header {
-    display: none !important;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 10px 15px;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.file-info-content {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.record-count-header {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+}
+
+.clear-file-btn-header {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    padding: 5px 12px;
+    border-radius: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.85rem;
+    transition: background 0.3s;
+}
+
+.clear-file-btn-header:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
 /* Dashboard Stats */
@@ -362,6 +395,11 @@ header {
     margin-top: 10px;
 }
 
+.status-note {
+    font-weight: bold;
+    color: #4caf50 !important;
+}
+
 /* Results Section */
 .results-section {
     background: white;
@@ -427,6 +465,8 @@ header {
     margin-bottom: 25px;
     border-radius: 8px;
     border: 1px solid #eee;
+    max-height: 500px;
+    overflow-y: auto;
 }
 
 .results-table {
@@ -437,6 +477,8 @@ header {
 .results-table thead {
     background: linear-gradient(to right, #3949ab, #5c6bc0);
     color: white;
+    position: sticky;
+    top: 0;
 }
 
 .results-table th {
@@ -621,7 +663,6 @@ footer {
     display: block !important;
 }
 
-/* Loading Animation */
 .loading-spinner {
     display: inline-block;
     width: 16px;
