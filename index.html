@@ -6,87 +6,6 @@
     <title>Skyinfo Tech Data Search System</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
-    <style>
-        /* Google Sheets specific styling */
-        .google-sheets-btn {
-            background: linear-gradient(to right, #0F9D58, #0B7E44) !important;
-        }
-
-        .google-sheets-btn:hover {
-            background: linear-gradient(to right, #0B7E44, #0A6337) !important;
-        }
-        
-        /* Loading Animation */
-        .loading-spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Connection Status in Header */
-        .connection-status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-left: 15px;
-            padding: 5px 12px;
-            background: rgba(255, 255, 255, 0.15);
-            border-radius: 20px;
-            font-size: 0.85rem;
-        }
-
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-
-        .status-dot.connected {
-            background: #4caf50;
-            box-shadow: 0 0 8px #4caf50;
-        }
-
-        .status-dot.connecting {
-            background: #ff9800;
-            animation: pulse 1s infinite;
-        }
-
-        .status-dot.error {
-            background: #f44336;
-        }
-
-        .status-text {
-            color: white;
-        }
-
-        .record-badge {
-            background: rgba(255, 255, 255, 0.25);
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 0.8rem;
-            margin-left: 5px;
-        }
-
-        /* Hide the file info section */
-        .file-info-header {
-            display: none !important;
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-    </style>
 </head>
 <body>
     <header>
@@ -308,7 +227,7 @@
                 <div class="footer-info">
                     <p>© 2026 Skyinfo Tech. All rights reserved. | Developed by BBC.</p>
                     <p class="footer-links">
-                        <a href="#" id="" target="_blank"><i class="fab fa-google"></i>Google Sheets</a>
+                        <a href="#" id="googleSheetsViewLink" target="_blank"><i class="fab fa-google"></i>Google Sheets</a>
                         <a href="#"><i class="fas fa-file-contract"></i> Terms of Service</a>
                         <a href="#"><i class="fas fa-envelope"></i> Contact Support</a>
                     </p>
