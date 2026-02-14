@@ -9,188 +9,12 @@ body {
     background-color: #f5f7fa;
     color: #333;
     line-height: 1.6;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .container {
     max-width: 1400px;
     margin: 0 auto;
     padding: 20px;
-}
-
-/* ===== LOGIN PANEL STYLES ===== */
-.login-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(135deg, #1a237e 0%, #283593 50%, #3949ab 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-}
-
-.login-box {
-    background: white;
-    border-radius: 20px;
-    padding: 40px;
-    width: 100%;
-    max-width: 400px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-    animation: slideUp 0.5s ease;
-}
-
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.login-header {
-    text-align: center;
-    margin-bottom: 30px;
-}
-
-.login-logo {
-    width: 80px;
-    height: 80px;
-    background: linear-gradient(135deg, #1a237e, #283593);
-    border-radius: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 20px;
-}
-
-.login-logo i {
-    font-size: 3rem;
-    color: #ffeb3b;
-}
-
-.login-header h2 {
-    color: #1a237e;
-    font-size: 1.8rem;
-    margin-bottom: 5px;
-}
-
-.login-header p {
-    color: #666;
-    font-size: 0.9rem;
-}
-
-.login-form {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-
-.input-group {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.input-group i {
-    position: absolute;
-    left: 15px;
-    color: #999;
-    font-size: 1rem;
-}
-
-.input-group input {
-    width: 100%;
-    padding: 15px 15px 15px 45px;
-    border: 2px solid #e0e0e0;
-    border-radius: 50px;
-    font-size: 1rem;
-    transition: all 0.3s;
-    outline: none;
-}
-
-.input-group input:focus {
-    border-color: #1a237e;
-    box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.1);
-}
-
-.login-btn {
-    background: linear-gradient(135deg, #1a237e, #283593);
-    color: white;
-    border: none;
-    padding: 15px;
-    border-radius: 50px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    transition: all 0.3s;
-}
-
-.login-btn:hover {
-    background: linear-gradient(135deg, #283593, #1a237e);
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(26, 35, 126, 0.3);
-}
-
-.login-btn i {
-    font-size: 1.1rem;
-}
-
-.login-error {
-    background: #ffebee;
-    color: #c62828;
-    padding: 12px;
-    border-radius: 50px;
-    font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    justify-content: center;
-    display: none;
-}
-
-.login-error.show {
-    display: flex;
-}
-
-.login-error i {
-    font-size: 1rem;
-}
-
-.login-footer {
-    text-align: center;
-    margin-top: 10px;
-    padding-top: 20px;
-    border-top: 1px solid #e0e0e0;
-    color: #666;
-    font-size: 0.85rem;
-}
-
-.login-footer p {
-    margin: 5px 0;
-}
-
-.login-footer strong {
-    color: #1a237e;
-}
-
-/* Main Content */
-.main-content {
-    width: 100%;
-    min-height: 100vh;
-    background-color: #f5f7fa;
 }
 
 /* ===== HEADER STYLES ===== */
@@ -373,30 +197,6 @@ header {
 .last-refresh i {
     font-size: 0.8rem;
     color: #ffeb3b;
-}
-
-/* Logout Button */
-.logout-btn {
-    background: rgba(255, 255, 255, 0.15);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 6px 15px;
-    border-radius: 30px;
-    font-size: 0.9rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.2s;
-}
-
-.logout-btn:hover {
-    background: rgba(255, 255, 255, 0.25);
-    border-color: rgba(255, 255, 255, 0.5);
-}
-
-.logout-btn i {
-    font-size: 0.9rem;
 }
 
 /* Controls Section */
@@ -961,25 +761,25 @@ footer {
         flex-direction: column;
         align-items: stretch;
     }
-    
+   
     .logo-title {
         justify-content: center;
         text-align: center;
     }
-    
+   
     .search-wrapper {
         min-width: 100%;
     }
-    
+   
     .header-bottom {
         flex-direction: column;
         align-items: stretch;
     }
-    
+   
     .status-section {
         justify-content: center;
     }
-    
+   
     .controls-section {
         justify-content: center;
     }
@@ -989,33 +789,32 @@ footer {
     .stats-container {
         grid-template-columns: 1fr;
     }
-    
+   
     .results-header {
         flex-direction: column;
         align-items: flex-start;
     }
-    
+   
     .footer-content {
         flex-direction: column;
         text-align: center;
     }
-    
+   
     .footer-info {
         text-align: center;
     }
-    
+   
     .footer-links {
         justify-content: center;
     }
-    
+   
     .status-section {
         flex-direction: column;
         width: 100%;
     }
-    
+   
     .connection-status,
-    .last-refresh,
-    .logout-btn {
+    .last-refresh {
         width: 100%;
         justify-content: center;
     }
@@ -1025,38 +824,33 @@ footer {
     .container {
         padding: 15px;
     }
-    
+   
     .stat-card {
         flex-direction: column;
         text-align: center;
     }
-    
+   
     .results-actions {
         flex-direction: column;
     }
-    
+   
     .action-btn {
         width: 100%;
         justify-content: center;
     }
-    
+   
     .controls-section {
         flex-direction: column;
         width: 100%;
     }
-    
+   
     .auto-refresh-control,
     .file-info,
     .refresh-btn {
         width: 100%;
     }
-    
+   
     .auto-refresh-control {
         justify-content: space-between;
-    }
-    
-    .login-box {
-        margin: 20px;
-        padding: 30px 20px;
     }
 }
