@@ -18,7 +18,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const noResultsMessage = document.getElementById('noResultsMessage');
     const noResultsText = document.getElementById('noResultsText');
     const resultsActions = document.querySelector('.results-actions');
-    const exportBtn = document.querySelector('.export-btn');
     const clearBtn = document.querySelector('.clear-btn');
     const countBadge = document.querySelector('.count-badge');
     const totalRecords = document.getElementById('totalRecords');
@@ -36,10 +35,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let branches = new Set();
     let isLoading = false;
     let autoRefreshEnabled = true;
-    let refreshTimerInterval = null;
     let countdownInterval = null;
-    let lastLoadTime = null;
     let secondsRemaining = 300; // 5 minutes = 300 seconds
+    let dataLoaded = false; // Flag to track if data has been loaded
     
     // ===== CONFIGURATION =====
     const SPREADSHEET_ID = '1p-fxYDbWxajcqmeKlTbOV7oLbRTD2z6J3ickMAnS-lg';
@@ -49,8 +47,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const REFRESH_INTERVAL = 300; // 5 minutes in seconds
     
     // ===== INITIALIZE =====
-    loadDataFromGoogleSheets();
-    startCountdown();
+    // Only load data if not already loaded
+    if (!dataLoaded) {
+        loadDataFromGoogleSheets();
+    }
     
     // Set view link
     if (googleSheetsViewLink) {
@@ -81,8 +81,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Refresh button
+    // Refresh button - manual refresh
     loadGoogleSheetsDataBtn.addEventListener('click', () => {
+        // Force reload even if data exists
+        dataLoaded = false;
+        uploadedData = [];
         loadDataFromGoogleSheets();
         resetCountdown();
     });
@@ -98,13 +101,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (refreshTimer) refreshTimer.textContent = 'OFF';
             if (nextRefreshNote) nextRefreshNote.textContent = 'Auto refresh disabled';
             showNotification('Auto refresh disabled', 'info');
-        }
-    });
-    
-    // Export button
-    exportBtn.addEventListener('click', () => {
-        if (currentResults.length > 0) {
-            exportToCSV(currentResults);
         }
     });
     
@@ -168,6 +164,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (secondsRemaining <= 0) {
                 // Time to refresh
                 if (autoRefreshEnabled && !isLoading) {
+                    // Force reload on auto refresh
+                    dataLoaded = false;
+                    uploadedData = [];
                     loadDataFromGoogleSheets();
                 }
                 secondsRemaining = REFRESH_INTERVAL;
@@ -210,6 +209,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load data from Google Sheets
     async function loadDataFromGoogleSheets() {
+        // Skip loading if data already exists (prevents reload on browser refresh)
+        if (dataLoaded && uploadedData.length > 0) {
+            console.log('Data already loaded, skipping reload on page refresh');
+            return;
+        }
+        
         if (isLoading) return;
         isLoading = true;
         
@@ -265,7 +270,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateLastRefreshTime();
                 resetCountdown();
                 showNotification(`✅ Loaded ${uploadedData.length.toLocaleString()} records`, 'success');
-                lastLoadTime = new Date();
+                
+                // Set flag that data has been loaded
+                dataLoaded = true;
             } else {
                 throw new Error('No data loaded');
             }
@@ -310,7 +317,13 @@ document.addEventListener('DOMContentLoaded', function() {
             { userId: 'ADMIN001', number: '918096475595', branch: 'Head Office', status: 'Active' },
             { userId: 'ADMIN002', number: '918096475596', branch: 'Head Office', status: 'Active' },
             { userId: 'USER1001', number: '91600000001', branch: 'Mumbai', status: 'Active' },
-            { userId: 'USER1002', number: '91600000002', branch: 'Mumbai', status: 'Inactive' }
+            { userId: 'USER1002', number: '91600000002', branch: 'Mumbai', status: 'Inactive' },
+            { userId: 'USER2001', number: '91700000001', branch: 'Delhi', status: 'Active' },
+            { userId: 'USER2002', number: '91700000002', branch: 'Delhi', status: 'Active' },
+            { userId: 'USER3001', number: '91800000001', branch: 'Bangalore', status: 'Pending' },
+            { userId: 'USER3002', number: '91800000002', branch: 'Bangalore', status: 'Active' },
+            { userId: 'bbc1234', number: '91900000001', branch: 'Chennai', status: 'Active' },
+            { userId: 'bbc5678', number: '91900000002', branch: 'Chennai', status: 'Active' }
         ];
         
         branches.clear();
@@ -326,6 +339,9 @@ document.addEventListener('DOMContentLoaded', function() {
         updateStats();
         updateLastRefreshTime();
         resetCountdown();
+        
+        // Set flag that data has been loaded
+        dataLoaded = true;
     }
     
     // Update stats
@@ -340,19 +356,24 @@ document.addEventListener('DOMContentLoaded', function() {
         totalBranches.textContent = branches.size.toLocaleString();
     }
     
-    // Perform search
+    // ===== SEARCH FUNCTION - EXACT MATCH ONLY =====
     function performSearch(searchTerm) {
         if (!searchTerm || uploadedData.length === 0) return;
         
         headerSearchBtn.disabled = true;
         
         setTimeout(() => {
-            const cleanTerm = searchTerm.toLowerCase().trim();
+            // Clean the search term - remove extra spaces
+            const cleanSearchTerm = searchTerm.trim();
             
+            // Filter for EXACT matches only (not partial)
             const filteredResults = uploadedData.filter(item => {
-                const userId = item.userId ? item.userId.toLowerCase() : '';
-                const number = item.number ? item.number.toString() : '';
-                return userId.includes(cleanTerm) || number.includes(cleanTerm);
+                // Get clean values for comparison
+                const userId = item.userId ? item.userId.trim() : '';
+                const number = item.number ? item.number.trim() : '';
+                
+                // Check for EXACT match using ===
+                return userId === cleanSearchTerm || number === cleanSearchTerm;
             });
             
             currentResults = filteredResults;
@@ -362,18 +383,18 @@ document.addEventListener('DOMContentLoaded', function() {
             countBadge.textContent = filteredResults.length.toLocaleString();
             
             if (filteredResults.length > 0) {
-                displayResults(filteredResults.slice(0, 100));
+                displayResults(filteredResults);
                 resultsTableContainer.classList.remove('hidden');
                 resultsActions.classList.remove('hidden');
                 noResultsMessage.classList.add('hidden');
-                showNotification(`Found ${filteredResults.length} records`, 'success');
+                showNotification(`Found ${filteredResults.length} exact matching records`, 'success');
             } else {
                 resultsTableBody.innerHTML = '';
                 resultsTableContainer.classList.add('hidden');
                 resultsActions.classList.add('hidden');
                 noResultsMessage.classList.remove('hidden');
-                noResultsText.textContent = `No records found for "${searchTerm}"`;
-                showNotification('No records found', 'info');
+                noResultsText.textContent = `No exact matches found for "${searchTerm}"`;
+                showNotification('No exact matches found', 'info');
             }
             
             headerSearchBtn.disabled = false;
@@ -425,23 +446,6 @@ document.addEventListener('DOMContentLoaded', function() {
         resultsActions.classList.add('hidden');
         noResultsMessage.classList.add('hidden');
         countBadge.textContent = '0';
-    }
-    
-    // Export to CSV
-    function exportToCSV(data) {
-        let csv = "UserID,Number,Branch,Status\n";
-        data.forEach(item => {
-            csv += `"${item.userId || ''}","${item.number || ''}","${item.branch || 'Unknown'}","${item.status || 'Active'}"\n`;
-        });
-        
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `search_results_${Date.now()}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-        showNotification(`Exported ${data.length} records`, 'success');
     }
     
     // Show notification
