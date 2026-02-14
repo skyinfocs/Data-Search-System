@@ -3,57 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Skyinfo Tech Data Search System - 29,630+ Records</title>
+    <title>Skyinfo Tech Data Search System</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header>
         <div class="container">
-            <div class="header-top">
-                <div class="logo-area">
+            <!-- Top Row: Title and Search Bar -->
+            <div class="header-main">
+                <div class="logo-title">
                     <div class="logo-icon">
                         <i class="fas fa-database"></i>
                     </div>
-                    <div class="title-area">
+                    <div class="title-wrapper">
                         <h1>Skyinfo Tech Data Search System</h1>
-                        <p>Search across 29,630+ records from Google Sheets</p>
+                        <p class="subtitle">Find multiple User IDs associated with a single number quickly and efficiently.</p>
                     </div>
                 </div>
                 
-                <div class="header-actions">
-                    <div class="header-search">
-                        <div class="search-box-header">
-                            <input type="text" id="headerSearchInput" placeholder="Search by number or User ID...">
-                            <button id="headerSearchBtn" class="search-btn-header">
-                                <i class="fas fa-search"></i>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="header-upload">
-                        <button id="loadGoogleSheetsDataBtn" class="upload-btn-header google-sheets-btn">
-                            <i class="fab fa-google"></i>
-                            <span>Refresh Data</span>
-                        </button>
-                    </div>
-
-                    <!-- Connection Status in Header -->
-                    <div class="connection-status" id="headerConnectionStatus">
-                        <span class="status-dot" id="statusDot"></span>
-                        <span class="status-text" id="statusText">Connecting...</span>
-                        <span class="record-badge" id="headerRecordBadge">0</span>
+                <!-- Search Bar -->
+                <div class="search-wrapper">
+                    <div class="search-box">
+                        <i class="fas fa-search search-icon"></i>
+                        <input type="text" id="headerSearchInput" placeholder="Search by number or User ID...">
+                        <button id="headerSearchBtn">Search</button>
                     </div>
                 </div>
             </div>
-            
-            <div class="file-info-header" id="headerFileInfo">
-                <div class="file-info-content">
-                    <i class="fab fa-google"></i>
-                    <span id="headerFileName">Loading 29,630+ records from Google Sheets...</span>
-                    <span id="headerRecordCount" class="record-count-header">0 records</span>
-                    <button id="headerClearFileBtn" class="clear-file-btn-header">
-                        <i class="fas fa-redo"></i> Refresh
+
+            <!-- Bottom Row: Status and Controls -->
+            <div class="header-bottom">
+                <!-- Left side: Connection Status and Last Refresh -->
+                <div class="status-section">
+                    <div class="connection-status" id="headerConnectionStatus">
+                        <span class="status-dot" id="statusDot"></span>
+                        <span class="status-text" id="statusText">Connected</span>
+                        <span class="record-badge" id="headerRecordBadge">0</span>
+                    </div>
+                    
+                    <!-- Last Refresh Time -->
+                    <div class="last-refresh" id="lastRefreshTime">
+                        <i class="fas fa-clock"></i>
+                        <span>Last: --:--:--</span>
+                    </div>
+                </div>
+
+                <!-- Right side: Auto Refresh with Timer and Data Info -->
+                <div class="controls-section">
+                    <!-- Auto Refresh Control with Timer -->
+                    <div class="auto-refresh-control">
+                        <i class="fas fa-sync-alt fa-spin" id="refreshSpinner" style="display: none;"></i>
+                        <span class="toggle-label">Auto Refresh</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoRefreshToggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="refresh-timer" id="refreshTimer">5:00</span>
+                    </div>
+
+                    <!-- Data Info -->
+                    <div class="file-info" id="headerFileInfo">
+                        <i class="fab fa-google"></i>
+                        <span id="headerFileName">Google Sheets Data</span>
+                        <span class="record-count" id="headerRecordCount">0 records</span>
+                    </div>
+                    
+                    <!-- Refresh Button -->
+                    <button id="loadGoogleSheetsDataBtn" class="refresh-btn" title="Refresh Now">
+                        <i class="fas fa-sync-alt"></i>
                     </button>
                 </div>
             </div>
@@ -128,29 +146,28 @@
         
         <section class="instructions-section">
             <div class="section-header">
-                <h3><i class="fas fa-info-circle"></i> System Status</h3>
+                <h3><i class="fas fa-info-circle"></i> How to Use</h3>
             </div>
             
             <div class="instructions-grid">
                 <div class="instruction-card">
                     <div class="instruction-icon">
-                        <i class="fas fa-database"></i>
+                        <i class="fas fa-search"></i>
                     </div>
                     <div class="instruction-content">
-                        <h4>Connected to Google Sheets</h4>
-                        <p>Loading <strong>29,630+ records</strong> using Google Sheets API</p>
-                        <p class="note status-note" id="statusNote">🟢 Connected • Loading data...</p>
+                        <h4>1. Search</h4>
+                        <p>Type a phone number or User ID in the search box and click Search or press Enter.</p>
                     </div>
                 </div>
                 
                 <div class="instruction-card">
                     <div class="instruction-icon">
-                        <i class="fas fa-search"></i>
+                        <i class="fas fa-sync-alt"></i>
                     </div>
                     <div class="instruction-content">
-                        <h4>Search Your Data</h4>
-                        <p>Use the search box in the header to search by phone number or User ID.</p>
-                        <p class="note">You can also click any quick search tag above.</p>
+                        <h4>2. Auto Refresh</h4>
+                        <p>Toggle auto refresh on/off. Updates every 5 minutes when enabled.</p>
+                        <p class="note" id="nextRefreshNote">Next refresh in 5:00</p>
                     </div>
                 </div>
                 
@@ -159,7 +176,7 @@
                         <i class="fas fa-download"></i>
                     </div>
                     <div class="instruction-content">
-                        <h4>Export Results</h4>
+                        <h4>3. Export</h4>
                         <p>Export your search results as CSV for further analysis.</p>
                     </div>
                 </div>
@@ -203,9 +220,6 @@
                     <button class="action-btn clear-btn">
                         <i class="fas fa-eraser"></i> Clear Results
                     </button>
-                    <button class="action-btn refresh-btn" id="refreshSearchBtn">
-                        <i class="fas fa-redo"></i> Refresh Search
-                    </button>
                 </div>
             </div>
         </section>
@@ -221,7 +235,7 @@
                 <div class="footer-info">
                     <p>© 2026 Skyinfo Tech. All rights reserved. | Developed by BBC</p>
                     <p class="footer-links">
-                        <a href="#" id="" target="_blank"><i class="fab fa-google"></i>View in Google Sheets</a>
+                         <a href="#" id="" target="_blank"><i class="fab fa-google"></i>View in Google Sheets</a>
                         <a href="#"><i class="fas fa-file-contract"></i> Terms</a>
                         <a href="#"><i class="fas fa-envelope"></i> Support</a>
                     </p>
