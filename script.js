@@ -14,9 +14,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Demo credentials
     const validUsers = [
-        { username: 'admin', password: 'admin123', name: 'Administrator' },
-        { username: 'user', password: 'user123', name: 'Regular User' },
-        { username: 'bbc', password: 'bbc2026', name: 'BBC User' }
+        { username: 'admin', password: 'customer@support', name: 'Administrator' },
+        { username: 'sambhai', password: 'sam@login', name: 'Samfernandez User' },
+        { username: 'sagar', password: 'sagar@login', name: 'Reed_little User' },
+        { username: 'guru', password: 'guru@login', name: 'Guru User' }
     ];
     
     // Check for saved login
@@ -951,3 +952,4 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
